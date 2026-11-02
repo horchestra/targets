@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [docker, ansible, k8s]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.target }}/go.mod
+          cache-dependency-path: ${{ matrix.target }}/go.sum
+      - name: gofmt
+        working-directory: ${{ matrix.target }}
+        run: |
+          out=$(gofmt -l .)
+          test -z "$out" || { echo "gofmt:"; echo "$out"; exit 1; }
+      - working-directory: ${{ matrix.target }}
+        run: go build ./...
+      - working-directory: ${{ matrix.target }}
+        run: go vet ./...
+      - working-directory: ${{ matrix.target }}
+        run: go test -race ./...

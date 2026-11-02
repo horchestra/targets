@@ -1,0 +1,32 @@
+name: release
+
+# a tag <target>/v* (docker/v0.1.0, ansible/v0.1.0, k8s/v0.1.0 — the tags of a Go module in a subdirectory) builds the
+# program of that target for the platforms and attaches pack-target-<target>_<os>_<arch>.tar.gz to the release: the
+# sources release.yaml's `targets:` points at, e.g.
+#   https://github.com/horchestra/targets/releases/download/docker/v0.1.0/pack-target-docker_{os}_{arch}.tar.gz
+on:
+  push:
+    tags: ["docker/v*", "ansible/v*", "k8s/v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  dist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: the target of the tag
+        run: echo "TARGET=${GITHUB_REF_NAME%%/*}" >> "$GITHUB_ENV"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ env.TARGET }}/go.mod
+      - name: test and archives
+        run: |
+          make test TARGETS="$TARGET"
+          make dist TARGETS="$TARGET"
+          (cd dist && sha256sum * > checksums.txt)
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

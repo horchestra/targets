@@ -1,0 +1,66 @@
+# ansible — classic hosts as a target
+
+`target: ansible` runs `pack-target-ansible`, a program of its own (a module with its own `go.mod` and `main.go`; see
+[docs/targets.md](https://github.com/horchestra/pack/blob/main/docs/targets.md)). A pack goes to hosts that SSH reaches — VMs, bare metal — named by an
+ansible inventory or by the environment's `hosts`. A key runs no container: the target installs the OS packages its
+entry names, delivers its rendered config files to its hosts and starts and enables its systemd services.
+
+**Ansible is only a transport.** Every step is ad-hoc commands (`ansible <pattern> -m <module> -a …`) of the built-in
+modules `package`, `copy`, `file`, `service` and `command`. The saga — hooks, order, waits, rollback — is pack's; no
+YAML
+of the operator's is ever run.
+
+## Settings (`env.yaml`)
+
+| Setting                                      | Default                      | Meaning                                                                                                             |
+|----------------------------------------------|------------------------------|---------------------------------------------------------------------------------------------------------------------|
+| `inventory`                                  | —                            | An ansible inventory file. Without one the hosts come from `hosts` and a temporary 0600 INI inventory is generated. |
+| `hosts.<name>.host`                          | —                            | The address ansible connects to — which is also how a neighbour reaches it. Required for every host.                |
+| `hosts.<name>.user`, `.port`, `.become`      | ssh's own                    | `ansible_user`, `ansible_port`, `ansible_become`.                                                                   |
+| `ansible`                                    | `ansible` from `PATH`        | The binary.                                                                                                         |
+| `become`, `become_method`, `ssh_private_key` | —                            | `--become`, `--become-method`, `--private-key`.                                                                     |
+| `state`                                      | `~/.pack/ansible-state.json` | The file that keeps the installation's record and the credentials pack provisioned.                                 |
+| `secrets.<name>.<key>`                       | —                            | The value `${secret:<name>/<key>}` stands for, when nothing else holds it.                                          |
+
+## A key's entry (`keys:`)
+
+| Entry      | Meaning                                                                                                                                                  |
+|------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `packages` | OS packages installed on the key's hosts: a list for every host, or a map `{RedHat: […], Debian: […]}` by `ansible_os_family` (asked of each host once). |
+| `hosts`    | Which hosts the key runs on, instance `i` on the `i`-th. Default: every host of the environment; with an `inventory` of your own, name them.             |
+| `services` | The systemd units the key manages: started and enabled at apply, verified `active` at wait, stopped at stop and remove.                                  |
+
+`replicas`, `resources`, `labels` and `reach` are the environment's too, but this target has no scheduler: `resources`
+say nothing here. A key is reached at its first host's address; with replicas, an instance per host.
+
+```yaml
+target: ansible
+become: true
+hosts:
+  a: { host: 10.0.0.11, user: ops }
+  b: { host: 10.0.0.12, user: ops }
+keys:
+  zookeeper: { replicas: 2, hosts: [ a, b ], packages: [ openjdk-17-jre-headless ], services: [ zookeeper ] }
+```
+
+## Steps
+
+| Step   |                                                                                                                                        |
+|--------|----------------------------------------------------------------------------------------------------------------------------------------|
+| apply  | installs the packages (`package`), delivers the files (`copy`, the mode kept, `${secret:…}` resolved), starts and enables the services |
+| wait   | `systemctl is-active` per service until every one is active on every host, or the timeout                                              |
+| stop   | `service state=stopped`                                                                                                                |
+| hook   | the hook's command (`command`, never a shell) on the key's first host                                                                  |
+| remove | stops the services, deletes the files the key delivered. **The packages stay**: another key may need them                              |
+
+## Secrets and state
+
+`${secret:…}` and secret files are resolved from the step's credentials, then the state, then `secrets.<name>.<key>`;
+the value travels in the arguments of the `copy` module (encrypted by SSH, visible in the process list of the machine
+that runs ansible for the command's run). The record and the credentials are kept in the `state` file (JSON, 0600, in a
+0700 directory, written by rename under a lock; credentials in plain text).
+
+## Requirements
+
+`ansible` where the target runs, and SSH from there to every host; `package` and `service` ask the host for a package
+manager and systemd. No volumes, no images, no failover.

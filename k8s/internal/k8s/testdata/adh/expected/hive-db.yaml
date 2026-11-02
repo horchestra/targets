@@ -1,0 +1,114 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  labels:
+    app.kubernetes.io/instance: prod
+    app.kubernetes.io/managed-by: pack
+    app.kubernetes.io/name: hive-db
+    pack.horchestra.io/part: config
+  name: prod-hive-db-etc-postgresql
+  namespace: data
+stringData:
+  postgresql.conf: |
+    listen_addresses=*
+    max_connections=100
+    port=5432
+    shared_buffers=1024MB
+type: Opaque
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/instance: prod
+    app.kubernetes.io/managed-by: pack
+    app.kubernetes.io/name: hive-db
+    pack.horchestra.io/part: workload
+  name: prod-hive-db
+  namespace: data
+spec:
+  clusterIP: None
+  ports:
+  - name: pg
+    port: 5432
+    targetPort: 5432
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/instance: prod
+    app.kubernetes.io/managed-by: pack
+    app.kubernetes.io/name: hive-db
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app.kubernetes.io/instance: prod
+    app.kubernetes.io/managed-by: pack
+    app.kubernetes.io/name: hive-db
+    pack.horchestra.io/part: workload
+  name: prod-hive-db
+  namespace: data
+spec:
+  podManagementPolicy: Parallel
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: prod
+      app.kubernetes.io/managed-by: pack
+      app.kubernetes.io/name: hive-db
+  serviceName: prod-hive-db
+  template:
+    metadata:
+      annotations:
+        pack.horchestra.io/config: 3ffe15b0ece382ac
+      labels:
+        app.kubernetes.io/instance: prod
+        app.kubernetes.io/managed-by: pack
+        app.kubernetes.io/name: hive-db
+    spec:
+      containers:
+      - env:
+        - name: POSTGRES_USER
+          value: postgres
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: prod-hive-db
+        image: images/postgres:16.3
+        name: hive-db
+        ports:
+        - containerPort: 5432
+          name: pg
+        readinessProbe:
+          tcpSocket:
+            port: 5432
+        resources:
+          limits:
+            memory: 4Gi
+          requests:
+            cpu: "2"
+            memory: 4Gi
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: data
+        - mountPath: /etc/postgresql/postgresql.conf
+          name: cfg-0
+          readOnly: true
+          subPath: postgresql.conf
+      volumes:
+      - name: cfg-0
+        secret:
+          items:
+          - key: postgresql.conf
+            path: postgresql.conf
+          secretName: prod-hive-db-etc-postgresql
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
