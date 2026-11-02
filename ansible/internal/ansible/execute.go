@@ -81,11 +81,29 @@ func (in *Installation) apply(ctx context.Context, u render.Unit, creds []render
 	if err != nil {
 		return err
 	}
+	resolve := in.resolver(creds)
+	if len(u.Packages) > 0 {
+		for _, h := range hosts {
+			p, f, err := in.packagesOn(ctx, r, u, h)
+			if err != nil {
+				return err
+			}
+			err = withMirror(ctx, r, h, f, in.mirror, events, func() error {
+				return in.applyPackages(ctx, r, u, h, p, f, resolve, events)
+			})
+			if err != nil {
+				return fmt.Errorf("%s: %s: %w", u.Key, h, err)
+			}
+		}
+		return nil
+	}
 	if err := in.installPackages(ctx, r, u.Key, hosts, in.platformFor(u.Key)["packages"], events); err != nil {
 		return fmt.Errorf("%s: %w", u.Key, err)
 	}
-	resolve := in.resolver(creds)
+	var notified []string
+	ev, fileChanged := watching(events)
 	for i, h := range hosts {
+		*fileChanged = false
 		for _, f := range u.Files {
 			data := f.Content
 			if f.PerInstance() {
@@ -98,7 +116,7 @@ func (in *Installation) apply(ctx context.Context, u render.Unit, creds []render
 			if err != nil {
 				return fmt.Errorf("%s: %s: %w", u.Key, f.Path, err)
 			}
-			if err := copyFile(ctx, r, h, f.Path, []byte(s), f.Mode, events); err != nil {
+			if err := copyFile(ctx, r, h, f.Path, []byte(s), f.Mode, ev); err != nil {
 				return fmt.Errorf("%s: %s: %w", u.Key, f.Path, err)
 			}
 		}
@@ -107,14 +125,21 @@ func (in *Installation) apply(ctx context.Context, u render.Unit, creds []render
 			if err != nil {
 				return fmt.Errorf("%s: %s: %w", u.Key, f.Path, err)
 			}
-			if err := copyFile(ctx, r, h, f.Path, []byte(v), f.Mode, events); err != nil {
+			if err := copyFile(ctx, r, h, f.Path, []byte(v), f.Mode, ev); err != nil {
 				return fmt.Errorf("%s: %s: %w", u.Key, f.Path, err)
 			}
 		}
+		if *fileChanged {
+			notified = append(notified, h)
+		}
 	}
-	for _, svc := range stringsOf(in.platformFor(u.Key)["services"]) {
-		if err := service(ctx, r, hosts, svc, "started", true, events); err != nil {
-			return fmt.Errorf("%s: %s: %w", u.Key, svc, err)
+	svcs := stringsOf(in.platformFor(u.Key)["services"])
+	if err := startServices(ctx, r, hosts, svcs, false, events); err != nil {
+		return fmt.Errorf("%s: %w", u.Key, err)
+	}
+	if len(notified) > 0 {
+		if err := startServices(ctx, r, notified, svcs, true, events); err != nil {
+			return fmt.Errorf("%s: %w", u.Key, err)
 		}
 	}
 	return nil
@@ -124,8 +149,7 @@ func (in *Installation) apply(ctx context.Context, u render.Unit, creds []render
 // or the step's timeout is out; a key without services needs no waiting —
 // apply saw its hosts answer.
 func (in *Installation) wait(ctx context.Context, u render.Unit, timeout string, events func(string)) error {
-	svcs := stringsOf(in.platformFor(u.Key)["services"])
-	if len(svcs) == 0 {
+	if len(u.Packages) == 0 && len(stringsOf(in.platformFor(u.Key)["services"])) == 0 {
 		return nil
 	}
 	r, err := in.transport()
@@ -136,20 +160,35 @@ func (in *Installation) wait(ctx context.Context, u render.Unit, timeout string,
 	if err != nil {
 		return err
 	}
+	var all []string
+	for _, h := range hosts {
+		svcs, err := in.servicesOn(ctx, r, u, h)
+		if err != nil {
+			return err
+		}
+		all = append(all, svcs...)
+	}
 	deadline := time.Now().Add(stepTimeout(timeout))
 	for {
 		active := true
-		for _, svc := range svcs {
-			if err := command(ctx, r, pattern(hosts), []string{"systemctl", "is-active", svc}, nil); err != nil {
-				active = false
-				break
+	each:
+		for _, h := range hosts {
+			svcs, err := in.servicesOn(ctx, r, u, h)
+			if err != nil {
+				return err
+			}
+			for _, svc := range svcs {
+				if err := command(ctx, r, h, []string{"systemctl", "is-active", svc}, nil); err != nil {
+					active = false
+					break each
+				}
 			}
 		}
 		if active {
 			return nil
 		}
 		if time.Now().After(deadline) || ctx.Err() != nil {
-			return fmt.Errorf("%s: services %s not active within %s", u.Key, strings.Join(svcs, ", "), stepTimeout(timeout))
+			return fmt.Errorf("%s: services %s not active within %s", u.Key, strings.Join(all, ", "), stepTimeout(timeout))
 		}
 		select {
 		case <-ctx.Done():
@@ -165,8 +204,7 @@ func (in *Installation) stop(ctx context.Context, st target.Step, events func(st
 	if err != nil {
 		return err
 	}
-	svcs := stringsOf(in.platformFor(u.Key)["services"])
-	if len(svcs) == 0 {
+	if len(u.Packages) == 0 && len(stringsOf(in.platformFor(u.Key)["services"])) == 0 {
 		return nil
 	}
 	r, err := in.transport()
@@ -177,9 +215,15 @@ func (in *Installation) stop(ctx context.Context, st target.Step, events func(st
 	if err != nil {
 		return err
 	}
-	for _, svc := range svcs {
-		if err := service(ctx, r, hosts, svc, "stopped", false, events); err != nil {
-			return fmt.Errorf("%s: %s: %w", st.Key, svc, err)
+	for _, h := range hosts {
+		svcs, err := in.servicesOn(ctx, r, *u, h)
+		if err != nil {
+			return err
+		}
+		for _, svc := range svcs {
+			if err := service(ctx, r, []string{h}, svc, "stopped", false, events); err != nil {
+				return fmt.Errorf("%s: %s: %w", st.Key, svc, err)
+			}
 		}
 	}
 	return nil
@@ -205,7 +249,15 @@ func (in *Installation) remove(ctx context.Context, st target.Step, events func(
 		return err
 	}
 	for _, h := range hosts {
-		for _, f := range u.Files {
+		files := u.Files
+		p, _, err := in.packagesOn(ctx, r, *u, h)
+		if err != nil {
+			return err
+		}
+		if p != nil {
+			files = p.Files
+		}
+		for _, f := range files {
 			if err := removeFile(ctx, r, h, f.Path, events); err != nil {
 				return fmt.Errorf("%s: %s: %w", st.Key, f.Path, err)
 			}

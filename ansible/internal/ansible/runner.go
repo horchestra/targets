@@ -3,6 +3,7 @@ package ansible
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -144,11 +145,16 @@ func copyFile(ctx context.Context, r Runner, host, path string, content []byte, 
 			return err
 		}
 	}
-	args := "dest=" + quote(path) + " content=" + quote(string(content))
+	// JSON: key=value is parsed by ansible's own rules, where a quote inside the content does not survive
+	fields := map[string]string{"dest": path, "content": string(content)}
 	if mode != nil {
-		args += fmt.Sprintf(" mode=0%o", mode.Perm())
+		fields["mode"] = fmt.Sprintf("0%o", mode.Perm())
 	}
-	return r.Run(ctx, host, "copy", args, events)
+	args, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	return r.Run(ctx, host, "copy", string(args), events)
 }
 
 // dirOf is the directory of a path on the host.

@@ -45,7 +45,11 @@ func Factory(installation string, set map[string]string) (target.Installation, e
 			return nil, fmt.Errorf("become: %w", err)
 		}
 	}
-	in := &Installation{installation: installation, settings: settings, hosts: map[string]*host{}, platform: map[string]map[string]any{}}
+	m, err := mirrorOf(settings)
+	if err != nil {
+		return nil, err
+	}
+	in := &Installation{mirror: m, installation: installation, settings: settings, hosts: map[string]*host{}, platform: map[string]map[string]any{}}
 	for k, v := range settings {
 		rest, ok := strings.CutPrefix(k, "hosts_")
 		if !ok {
@@ -99,7 +103,7 @@ func Factory(installation string, set map[string]string) (target.Installation, e
 }
 
 func check(settings target.Settings) error {
-	return settings.Check("ansible", append([]string{"inventory", "ansible", "state", "become", "become_method", "ssh_private_key"}, secretstore.SettingKeys...),
+	return settings.Check("ansible", append([]string{"mirror_registry", "mirror_plain_http", "mirror_port", "mirror_username_env", "mirror_password_env", "inventory", "ansible", "state", "become", "become_method", "ssh_private_key"}, secretstore.SettingKeys...),
 		[]string{"hosts_", "secrets_"})
 }
 
@@ -115,6 +119,7 @@ type host struct {
 
 // Installation is the target bound to one installation on its hosts.
 type Installation struct {
+	mirror       *mirror // oci-proxy on a host while it installs; nil — none
 	installation string
 	settings     target.Settings
 	hosts        map[string]*host
@@ -130,6 +135,7 @@ type Installation struct {
 	// the OS family of each host, asked once (packages given by family)
 	famMu    sync.Mutex
 	families map[string]string
+	facts    map[string]osFacts // the OS of each host, asked once
 
 	// the ansible runner, made on first use; a test sets a fake.
 	once   sync.Once

@@ -3,7 +3,7 @@ module github.com/horchestra/targets/docker
 go 1.27.1
 
 require (
-	github.com/horchestra/pack v0.1.0
+	github.com/horchestra/pack v0.2.0
 	golang.org/x/crypto v0.58.0
 )
 
@@ -45,4 +45,5 @@ require (
 )
 
 replace github.com/arenadata/oci-packer v0.0.0 => github.com/arenadata/oci-packer v0.0.0-20261102083223-1b89cf940950
+
 replace github.com/arenadata/oci-packer/types v0.0.0 => github.com/arenadata/oci-packer/types v0.0.0-20261102083223-1b89cf940950

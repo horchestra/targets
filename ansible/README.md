@@ -6,7 +6,7 @@ ansible inventory or by the environment's `hosts`. A key runs no container: the 
 entry names, delivers its rendered config files to its hosts and starts and enables its systemd services.
 
 **Ansible is only a transport.** Every step is ad-hoc commands (`ansible <pattern> -m <module> -a …`) of the built-in
-modules `package`, `copy`, `file`, `service` and `command`. The saga — hooks, order, waits, rollback — is pack's; no
+modules `package`, `apt`, `copy`, `get_url`, `file`, `service`, `setup`, `wait_for` and `command`. The saga — hooks, order, waits, rollback — is pack's; no
 YAML
 of the operator's is ever run.
 
@@ -26,9 +26,9 @@ of the operator's is ever run.
 
 | Entry      | Meaning                                                                                                                                                  |
 |------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `packages` | OS packages installed on the key's hosts: a list for every host, or a map `{RedHat: […], Debian: […]}` by `ansible_os_family` (asked of each host once). |
+| `packages` | OS packages installed on the key's hosts: a list for every host, or a map `{debian-13: […], fedora: […], RedHat: […]}`, the most exact name a host goes by winning. Over what the pack says, or an OS the pack does not know. |
 | `hosts`    | Which hosts the key runs on, instance `i` on the `i`-th. Default: every host of the environment; with an `inventory` of your own, name them.             |
-| `services` | The systemd units the key manages: started and enabled at apply, verified `active` at wait, stopped at stop and remove.                                  |
+| `services` | The systemd units the key manages, over what the pack says: started and enabled at apply, restarted when a file of the key changed, verified `active` at wait, stopped at stop and remove. |
 
 `replicas`, `resources`, `labels` and `reach` are the environment's too, but this target has no scheduler: `resources`
 say nothing here. A key is reached at its first host's address; with replicas, an instance per host.
@@ -47,11 +47,34 @@ keys:
 
 | Step   |                                                                                                                                        |
 |--------|----------------------------------------------------------------------------------------------------------------------------------------|
-| apply  | installs the packages (`package`), delivers the files (`copy`, the mode kept, `${secret:…}` resolved), starts and enables the services |
+| apply  | a pack with `Packages`: the entry of the host's OS, in its order, with `${os:…}` resolved. Otherwise the key's packages (`package`), its files (`copy`, the mode kept, `${secret:…}` resolved). Starts and enables the services; restarts them only where a file changed, what a playbook's `notify` does. `Content` of the pack's root is the image's and is not delivered here: a host gets the files of its OS's entry |
 | wait   | `systemctl is-active` per service until every one is active on every host, or the timeout                                              |
 | stop   | `service state=stopped`                                                                                                                |
 | hook   | the hook's command (`command`, never a shell) on the key's first host                                                                  |
 | remove | stops the services, deletes the files the key delivered. **The packages stay**: another key may need them                              |
+
+## Packages from a registry
+
+A package repository can be kept in the registry the packs are in, as an artifact whose files keep their paths
+(`oci-packer oci://registry -f pack.yaml`, `repository: mirrors/docker-debian:29`, `from: dir://repo/`). The target
+carries `oci-proxy` to each host while it installs: it listens on the host's loopback, gives the files as an ordinary
+tree, `http://127.0.0.1:8081/<repo>:<tag>/<file>`, and is gone after, on a failure too. The hosts need the registry, not
+the internet.
+
+| Setting                                      | Default | Meaning                                                              |
+|----------------------------------------------|---------|----------------------------------------------------------------------|
+| `mirror_registry`                            | —       | The registry, as the hosts reach it. Without it no `oci-proxy` runs. |
+| `mirror_plain_http`                          | `false` | The registry speaks http.                                            |
+| `mirror_port`                                | `8081`  | The port on the host's loopback.                                     |
+| `mirror_username_env`, `mirror_password_env` | —       | The variables that hold the registry's credentials.                  |
+
+The pack is told where to look by a value of its own (`mirror`, `release_url`):
+`mirror: http://127.0.0.1:8081/mirrors/docker-debian:29`. A host with no way to the internet still needs what `Prepare`
+names, what the packages depend on and what ansible's modules need (`python3-apt` on Debian): from a mirror of the OS's
+own repository, or there beforehand. `make oci-proxy` builds the programs the target embeds (linux/amd64, linux/arm64).
+
+`oci-proxy` runs on its own too, configured by the environment alone: `OCI_PROXY_REGISTRY`, `OCI_PROXY_ADDR`,
+`OCI_PROXY_PLAIN_HTTP`, `OCI_PROXY_USER`, `OCI_PROXY_PASSWORD`. On SIGTERM it finishes the requests under way and exits 0.
 
 ## Secrets and state
 

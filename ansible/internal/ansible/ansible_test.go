@@ -2,10 +2,12 @@ package ansible
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -180,11 +182,11 @@ func TestApply(t *testing.T) {
 	if len(copies) != 4 {
 		t.Fatalf("a file and a secret file per host: %+v", copies)
 	}
-	if !strings.Contains(copies[0].args, "dest='/etc/pg/postgresql.conf'") ||
-		!strings.Contains(copies[0].args, "password=s3cret") || !strings.Contains(copies[0].args, "mode=0640") {
+	if !strings.Contains(copies[0].args, `"dest":"/etc/pg/postgresql.conf"`) ||
+		!strings.Contains(copies[0].args, "password=s3cret") || !strings.Contains(copies[0].args, `"mode":"0640"`) {
 		t.Errorf("the file, resolved, with its mode: %s", copies[0].args)
 	}
-	if !strings.Contains(copies[1].args, "dest='/etc/pg/pg.keytab'") || !strings.Contains(copies[1].args, "KEYTAB") {
+	if !strings.Contains(copies[1].args, `"dest":"/etc/pg/pg.keytab"`) || !strings.Contains(copies[1].args, "KEYTAB") {
 		t.Errorf("the secret file: %s", copies[1].args)
 	}
 	// the directory of each file is made before the file is copied into it
@@ -224,7 +226,7 @@ func TestWaitStopRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 	cmds := r.of("command")
-	if len(cmds) != 1 || cmds[0].args != "'systemctl' 'is-active' 'postgresql'" {
+	if len(cmds) != 2 || cmds[0].args != "'systemctl' 'is-active' 'postgresql'" {
 		t.Errorf("is-active: %+v", cmds)
 	}
 
@@ -232,7 +234,7 @@ func TestWaitStopRemove(t *testing.T) {
 	if err := in.Execute(ctx, target.Step{N: 3, Kind: "stop", Key: "pg", Previous: unit()}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if svcs := r.of("service"); len(svcs) != 1 || svcs[0].args != "name='postgresql' state=stopped" {
+	if svcs := r.of("service"); len(svcs) != 2 || svcs[0].args != "name='postgresql' state=stopped" {
 		t.Errorf("stop: %+v", svcs)
 	}
 
@@ -477,5 +479,180 @@ func TestResolve(t *testing.T) {
 	}
 	if res.Reach == nil || res.Reach.Instances[0] != "pg.example" || res.Reach.Ports["pg"] != 5432 {
 		t.Errorf("reach: %+v", res.Reach)
+	}
+}
+
+// changing is a runner whose copy reports a change on the hosts named, the way ansible prints it.
+type changing struct {
+	fakeRunner
+	changed map[string]bool
+	facts   string
+}
+
+func (c *changing) Run(ctx context.Context, pattern, module, args string, events func(string)) error {
+	if module == "setup" && events != nil {
+		events(c.facts)
+		c.calls = append(c.calls, fakeCall{pattern, module, args})
+		return nil
+	}
+	if module == "copy" && c.changed[pattern] && events != nil {
+		events(pattern + " | CHANGED => {")
+	}
+	return c.fakeRunner.Run(ctx, pattern, module, args, events)
+}
+
+const debian13 = `"ansible_distribution": "Debian", "ansible_distribution_major_version": "13", "ansible_distribution_release": "trixie", "ansible_os_family": "Debian", "ansible_architecture": "aarch64"`
+
+// The entry of the most exact name is taken, the order is the pack's, ${os:…} is the host's, a package file goes through apt.
+func TestApplyPackages(t *testing.T) {
+	r := &changing{facts: debian13}
+	in := &Installation{}
+	u := render.Unit{Key: "docker", Packages: map[string]render.Packages{
+		"fedora": {Names: []string{"wrong"}},
+		"debian": {Names: []string{"wrong"}},
+		"Debian-13": {
+			Prepare:  []string{"ca-certificates"},
+			Repo:     []render.File{{Path: "/etc/apt/k.asc", URL: "https://x/gpg"}, {Path: "/etc/apt/s", Content: []byte("Suites: ${os:codename}\n")}},
+			Names:    []string{"engine", "https://x/${os:arch}.deb"},
+			Files:    []render.File{{Path: "/etc/d.json", Content: []byte("{}")}},
+			Services: []string{"docker"},
+		},
+	}}
+	p, f, err := in.packagesOn(context.Background(), r, u, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := in.applyPackages(context.Background(), r, u, "a", p, f, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, c := range r.calls {
+		if c.module != "file" && c.module != "setup" {
+			got = append(got, c.module)
+		}
+	}
+	want := []string{"package", "get_url", "copy", "apt", "apt", "package", "copy", "service"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("order = %v, want %v", got, want)
+	}
+	if s := r.of("copy")[0].args; !strings.Contains(s, "Suites: trixie") {
+		t.Errorf("the codename: %s", s)
+	}
+	if s := r.of("apt")[1].args; s != "deb='https://x/arm64.deb'" && s != "deb=https://x/arm64.deb" && s != `deb="https://x/arm64.deb"` {
+		t.Errorf("the package file: %s", s)
+	}
+}
+
+// An OS no one named is an error that says where to name it; the environment may name it without touching the pack.
+func TestPackagesOfAnOSThePackDoesNotKnow(t *testing.T) {
+	r := &changing{facts: `"ansible_distribution": "Alpine", "ansible_distribution_major_version": "3", "ansible_os_family": "Alpine"`}
+	u := render.Unit{Key: "docker", Packages: map[string]render.Packages{"debian": {Names: []string{"x"}}}}
+	in := &Installation{platform: map[string]map[string]any{}}
+	if _, _, err := in.packagesOn(context.Background(), r, u, "a"); err == nil || !strings.Contains(err.Error(), "keys.docker.packages") {
+		t.Errorf("no entry: %v", err)
+	}
+	in.platform["docker"] = map[string]any{"packages": map[string]any{"alpine": []any{"docker"}}, "services": []any{"docker"}}
+	p, _, err := in.packagesOn(context.Background(), r, u, "a")
+	if err != nil || p.Names[0] != "docker" || p.Services[0] != "docker" {
+		t.Errorf("named in the environment: %+v, %v", p, err)
+	}
+}
+
+// A quote in a file survives: the content does not go through ansible's key=value.
+func TestCopyKeepsQuotes(t *testing.T) {
+	r := &fakeRunner{}
+	if err := copyFile(context.Background(), r, "a", "/f", []byte("x = '1'\n"), nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]string
+	if err := json.Unmarshal([]byte(r.of("copy")[0].args), &got); err != nil || got["content"] != "x = '1'\n" {
+		t.Errorf("args %s: %v", r.of("copy")[0].args, err)
+	}
+}
+
+// A unit is restarted only when a file changed: the notify of a playbook.
+func TestRestartOnlyWhenAFileChanged(t *testing.T) {
+	for changed, restarts := range map[bool]int{true: 1, false: 0} {
+		r := &changing{facts: debian13, changed: map[string]bool{"a": changed}}
+		in := &Installation{}
+		u := render.Unit{Key: "k", Packages: map[string]render.Packages{"debian": {
+			Names: []string{"x"}, Files: []render.File{{Path: "/f", Content: []byte("x")}}, Services: []string{"svc"},
+		}}}
+		p, f, err := in.packagesOn(context.Background(), r, u, "a")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := in.applyPackages(context.Background(), r, u, "a", p, f, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+		n := 0
+		for _, c := range r.of("service") {
+			if strings.Contains(c.args, "state=restarted") {
+				n++
+			}
+		}
+		if n != restarts {
+			t.Errorf("changed=%v: %d restarts, %v", changed, n, r.of("service"))
+		}
+	}
+}
+
+// With mirror_registry, oci-proxy runs on the host's loopback while the host installs, and is gone after, also on a failure.
+func TestMirrorAroundAnInstallation(t *testing.T) {
+	r := &changing{facts: debian13}
+	f, err := (&Installation{}).factsOf(context.Background(), r, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := &mirror{registry: "reg:5000", plainHTTP: true, port: "8081"}
+	boom := errors.New("boom")
+	// the program is built by make oci-proxy: without it the target says so, and installs nothing
+	if _, err := ociProxy.ReadFile("ociproxy/oci-proxy-linux-arm64"); err != nil {
+		if err := withMirror(context.Background(), r, "a", f, m, nil, func() error { return boom }); err == nil || !strings.Contains(err.Error(), "make oci-proxy") {
+			t.Fatalf("no program: %v", err)
+		}
+		t.Skip("oci-proxy is not built here")
+	}
+	if err := withMirror(context.Background(), r, "a", f, m, nil, func() error { return boom }); !errors.Is(err, boom) {
+		t.Fatalf("err = %v", err)
+	}
+	cmds := r.of("command")
+	if !strings.Contains(cmds[1].args, "systemd-run") || strings.Contains(cmds[1].args, "reg:5000") {
+		t.Errorf("start, its configuration in the environment file: %v", cmds[1])
+	}
+	var env map[string]string
+	for _, c := range r.of("copy") {
+		var fields map[string]string
+		if json.Unmarshal([]byte(c.args), &fields) == nil && fields["dest"] == mirrorEnvFile {
+			env = fields
+		}
+	}
+	if !strings.Contains(env["content"], "OCI_PROXY_REGISTRY=reg:5000\n") || !strings.Contains(env["content"], "OCI_PROXY_ADDR=127.0.0.1:8081\n") ||
+		!strings.Contains(env["content"], "OCI_PROXY_PLAIN_HTTP=true\n") || env["mode"] != "0600" {
+		t.Errorf("the environment file: %v", env)
+	}
+	if !strings.Contains(cmds[len(cmds)-1].args, "systemctl stop") {
+		t.Errorf("not stopped: %v", cmds)
+	}
+	if len(r.of("wait_for")) != 1 {
+		t.Errorf("does not wait for it: %v", r.calls)
+	}
+}
+
+func TestMirrorSettings(t *testing.T) {
+	t.Setenv("U", "me")
+	t.Setenv("P", "secret")
+	m, err := mirrorOf(target.Settings{"mirror_registry": "oci://reg", "mirror_plain_http": "true", "mirror_username_env": "U", "mirror_password_env": "P"})
+	if err != nil || m.user != "me" || m.password != "secret" || !m.plainHTTP || m.port != "8081" {
+		t.Errorf("%+v %v", m, err)
+	}
+	if m, err := mirrorOf(target.Settings{}); m != nil || err != nil {
+		t.Errorf("none: %+v %v", m, err)
+	}
+	if _, err := mirrorOf(target.Settings{"mirror_registry": "r", "mirror_username_env": "U"}); err == nil {
+		t.Error("a user without a password")
+	}
+	if _, err := mirrorOf(target.Settings{"mirror_registry": "r", "mirror_username_env": "NOPE", "mirror_password_env": "NOPE"}); err == nil {
+		t.Error("variables that are not set")
 	}
 }

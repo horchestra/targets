@@ -7,12 +7,17 @@ BIN     ?= bin
 TARGETS ?= docker ansible k8s
 
 .DEFAULT_GOAL := help
-.PHONY: help build dist test vet fmt tidy install clean $(TARGETS)
+.PHONY: help oci-proxy build dist test vet fmt tidy install clean $(TARGETS)
 
 help: ## list the targets
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-10s %s\n", $$1, $$2}'
 
-build: ## build pack-target-docker, -ansible and -k8s into bin/
+oci-proxy: ## the oci-proxy programs the ansible target carries to the hosts (linux/amd64, linux/arm64)
+	@for a in amd64 arm64; do \
+		(cd ansible && CGO_ENABLED=0 GOOS=linux GOARCH=$$a $(GO) build -trimpath -ldflags='-s -w' -o internal/ansible/ociproxy/oci-proxy-linux-$$a ./cmd/oci-proxy) || exit 1; \
+	done
+
+build: oci-proxy ## build pack-target-docker, -ansible and -k8s into bin/
 	@for t in $(TARGETS); do \
 		echo "build pack-target-$$t"; \
 		(cd $$t && $(GO) build -o ../$(BIN)/pack-target-$$t .) || exit 1; \
@@ -20,7 +25,7 @@ build: ## build pack-target-docker, -ansible and -k8s into bin/
 
 PLATFORMS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 
-dist: ## per platform archives for a release: dist/pack-target-<name>_<os>_<arch>.tar.gz (what release.yaml's targets: points at)
+dist: oci-proxy ## per platform archives for a release: dist/pack-target-<name>_<os>_<arch>.tar.gz (what release.yaml's targets: points at)
 	@for t in $(TARGETS); do for p in $(PLATFORMS); do \
 		os=$${p%/*}; arch=$${p#*/}; tmp=$$(mktemp -d); \
 		echo "dist pack-target-$$t $$os/$$arch"; \
@@ -28,7 +33,7 @@ dist: ## per platform archives for a release: dist/pack-target-<name>_<os>_<arch
 		mkdir -p dist; tar -C $$tmp -czf dist/pack-target-$${t}_$${os}_$${arch}.tar.gz pack-target-$$t; rm -rf $$tmp; \
 	done; done
 
-$(TARGETS): ## build one of them: make docker
+$(TARGETS): oci-proxy ## build one of them: make docker
 	cd $@ && $(GO) build -o ../$(BIN)/pack-target-$@ .
 
 test: ## go test -race of every module
