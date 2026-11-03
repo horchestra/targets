@@ -33,3 +33,20 @@ jobs:
         run: go vet ./...
       - working-directory: ${{ matrix.target }}
         run: go test -race ./...
+
+  image:
+    name: image ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [docker, ansible, k8s]
+    steps:
+      - uses: actions/checkout@v4
+      - name: build the image
+        run: docker build -t targets/${{ matrix.target }}:ci ${{ matrix.target }}
+      - name: its labels say the target and the protocol
+        run: |
+          labels=$(docker image inspect --format '{{json .Config.Labels}}' targets/${{ matrix.target }}:ci)
+          echo "$labels" | grep -q '"io.horchestra.pack.target":"${{ matrix.target }}"'
+          echo "$labels" | grep -q '"io.horchestra.pack.protocol":"pack.target.v1"'

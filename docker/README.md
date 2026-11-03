@@ -103,3 +103,29 @@ or in the `state` file (0600), or — credentials — in the secret store.
 ## Requirements
 
 Docker ≥ 26 on every engine; every image on each engine or pullable by it; no failover across hosts.
+
+## In a container
+
+`ghcr.io/horchestra/targets/docker:<version>` is the program with the docker CLI; pack runs it with
+`runtime: {type: docker}` ([docs/targets.md](https://github.com/horchestra/pack/blob/main/docs/targets.md#where-a-target-runs-the-runtime)).
+The engine is reached through its socket, mounted, or over ssh as from a machine:
+
+```yaml
+# release.yaml
+targets:
+  docker:
+    image: oci://ghcr.io/horchestra/targets/docker:0.2.0
+```
+
+```yaml
+# env.yaml
+target: docker
+runtime:
+  type: docker
+  mounts:
+    - /var/run/docker.sock:/var/run/docker.sock
+```
+
+`make images` builds the images of the three targets for this machine's architecture (`REGISTRY`, `VERSION`);
+`PUSH=1` builds them for `linux/amd64` and `linux/arm64` with buildx (`IMAGE_PLATFORMS`) and pushes them, as a release
+does.

@@ -68,3 +68,25 @@ anti-affinity (`spread`) have no counterpart in the render of this pack format y
 
 Rights in the namespace for StatefulSets, Jobs, Services, Secrets, ConfigMaps, PVCs and pods (list, logs). The immutable
 fields of a StatefulSet (`volumeClaimTemplates`, the selector) are not recreated on a change: apply refuses.
+
+## In a container
+
+`ghcr.io/horchestra/targets/k8s:<version>` is the program alone (client-go is in it); pack runs it with
+`runtime: {type: docker}` ([docs/targets.md](https://github.com/horchestra/pack/blob/main/docs/targets.md#where-a-target-runs-the-runtime)).
+The kubeconfig is a mount; a cluster on the machine's loopback (kind, k3d) wants `network: host` on Linux.
+
+```yaml
+# release.yaml
+targets:
+  k8s:
+    image: oci://ghcr.io/horchestra/targets/k8s:0.2.0
+```
+
+```yaml
+# env.yaml
+target: k8s
+runtime:
+  type: docker
+  mounts:
+    - ~/.kube/config:/home/pack/.kube/config:ro
+```

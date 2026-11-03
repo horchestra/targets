@@ -7,7 +7,7 @@ BIN     ?= bin
 TARGETS ?= docker ansible k8s
 
 .DEFAULT_GOAL := help
-.PHONY: help oci-proxy build dist test vet fmt tidy install clean $(TARGETS)
+.PHONY: help oci-proxy build dist images test vet fmt tidy install clean $(TARGETS)
 
 help: ## list the targets
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-10s %s\n", $$1, $$2}'
@@ -32,6 +32,20 @@ dist: oci-proxy ## per platform archives for a release: dist/pack-target-<name>_
 		(cd $$t && CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build -o $$tmp/pack-target-$$t .) || exit 1; \
 		mkdir -p dist; tar -C $$tmp -czf dist/pack-target-$${t}_$${os}_$${arch}.tar.gz pack-target-$$t; rm -rf $$tmp; \
 	done; done
+
+REGISTRY ?= ghcr.io/horchestra
+VERSION  ?= dev
+IMAGE_PLATFORMS ?= linux/amd64,linux/arm64
+
+images: ## the images pack runs a target from (runtime: docker): $(REGISTRY)/targets/<name>:$(VERSION), for this machine's arch; PUSH=1 builds them for IMAGE_PLATFORMS and pushes them
+	@for t in $(TARGETS); do \
+		echo "image $(REGISTRY)/targets/$$t:$(VERSION)"; \
+		if [ -n "$(PUSH)" ]; then \
+			docker buildx build --platform $(IMAGE_PLATFORMS) --push -t $(REGISTRY)/targets/$$t:$(VERSION) $$t || exit 1; \
+		else \
+			docker build -t $(REGISTRY)/targets/$$t:$(VERSION) $$t || exit 1; \
+		fi; \
+	done
 
 $(TARGETS): oci-proxy ## build one of them: make docker
 	cd $@ && $(GO) build -o ../$(BIN)/pack-target-$@ .

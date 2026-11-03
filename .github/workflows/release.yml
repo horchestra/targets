@@ -4,12 +4,17 @@ name: release
 # program of that target for the platforms and attaches pack-target-<target>_<os>_<arch>.tar.gz to the release: the
 # sources release.yaml's `targets:` points at, e.g.
 #   https://github.com/horchestra/targets/releases/download/docker/v0.1.0/pack-target-docker_{os}_{arch}.tar.gz
+#
+# It also builds the target's image for linux/amd64 and linux/arm64 and pushes it as
+# ghcr.io/horchestra/targets/<target>:<version> — what release.yaml's `targets: {<target>: {image: oci://…}}` names for
+# a target that runs in a container (runtime: {type: docker}).
 on:
   push:
     tags: ["docker/v*", "ansible/v*", "k8s/v*"]
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   dist:
@@ -30,3 +35,25 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: the target and the version of the tag
+        run: |
+          echo "TARGET=${GITHUB_REF_NAME%%/*}" >> "$GITHUB_ENV"
+          echo "VERSION=${GITHUB_REF_NAME#*/v}" >> "$GITHUB_ENV"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.TARGET }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/horchestra/targets/${{ env.TARGET }}:${{ env.VERSION }}

@@ -87,3 +87,38 @@ that runs ansible for the command's run). The record and the credentials are kep
 
 `ansible` where the target runs, and SSH from there to every host; `package` and `service` ask the host for a package
 manager and systemd. No volumes, no images, no failover.
+
+## In a container
+
+`ghcr.io/horchestra/targets/ansible:<version>` is the program with ansible-core and the ssh client, so that the machine
+pack runs on needs neither; pack runs it with `runtime: {type: docker}`
+([docs/targets.md](https://github.com/horchestra/pack/blob/main/docs/targets.md#where-a-target-runs-the-runtime)).
+`state` stays at its default: the container's home is the release's `.pack/home/ansible`, and the state outlives the
+container there.
+
+```yaml
+# release.yaml
+targets:
+  ansible:
+    image: oci://ghcr.io/horchestra/targets/ansible:0.2.0
+```
+
+```yaml
+# env.yaml
+target: ansible
+ssh_private_key: /home/pack/.ssh/id
+runtime:
+  type: docker
+  mounts:
+    - ~/.ssh/deploy:/home/pack/.ssh/id:ro
+    - ~/.ssh/known_hosts:/home/pack/.ssh/known_hosts:ro
+  env:
+    - ANSIBLE_HOST_KEY_CHECKING          # passed by name, when the hosts' keys are not in known_hosts
+hosts:
+  a:
+    host: 10.0.0.11
+```
+
+`ssh_agent: true` gives the container the machine's agent instead of a key. A host the machine reaches at its own
+loopback (a tunnel, a VM's forwarded port) is `host.docker.internal` from a container of Docker Desktop, or
+`network: host` on Linux.
