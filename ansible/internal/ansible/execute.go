@@ -49,6 +49,10 @@ func (in *Installation) Execute(ctx context.Context, st target.Step, events func
 		return in.remove(ctx, st, events)
 	case "hook":
 		return in.hook(ctx, st, events)
+	case "exec":
+		// an action of the pack (pack run): its command on the key's first host, where the installation is — the
+		// same as a hook's here, a host has no instance apart from itself
+		return in.hook(ctx, st, events)
 	}
 	return fmt.Errorf("step %d: %q is no step kind", st.N, st.Kind)
 }
@@ -271,14 +275,14 @@ func (in *Installation) remove(ctx context.Context, st target.Step, events func(
 	return nil
 }
 
-// hook runs the step's command on the key's first host — module command,
+// hook runs the step's command — a hook's, an action's (exec) — on the key's first host — module command,
 // step.Timeout its deadline.
 func (in *Installation) hook(ctx context.Context, st target.Step, events func(string)) error {
 	if st.Unit == nil {
-		return fmt.Errorf("hook %s: no unit", st.Name)
+		return fmt.Errorf("%s %s: no unit", st.Kind, st.Name)
 	}
 	if len(st.Command) == 0 {
-		return fmt.Errorf("hook %s: no command", st.Name)
+		return fmt.Errorf("%s %s: no command", st.Kind, st.Name)
 	}
 	r, err := in.transport()
 	if err != nil {
@@ -296,9 +300,9 @@ func (in *Installation) hook(ctx context.Context, st target.Step, events func(st
 	defer cancel()
 	if err := command(hctx, r, hosts[0], st.Command, events); err != nil {
 		if errors.Is(hctx.Err(), context.DeadlineExceeded) {
-			return fmt.Errorf("hook %s: did not finish within %s", st.Name, timeout)
+			return fmt.Errorf("%s %s: did not finish within %s", st.Kind, st.Name, timeout)
 		}
-		return fmt.Errorf("hook %s: %w", st.Name, err)
+		return fmt.Errorf("%s %s: %w", st.Kind, st.Name, err)
 	}
 	return nil
 }

@@ -296,6 +296,20 @@ func TestHook(t *testing.T) {
 	}
 }
 
+// An action of the pack (exec) is its command on the key's first host too.
+func TestExec(t *testing.T) {
+	in := configure(t, target.Settings{"hosts_a_host": "10.0.0.1", "hosts_b_host": "10.0.0.2"})
+	r := &fakeRunner{}
+	in.runner = r
+	st := target.Step{N: 1, Kind: "exec", Key: "pg", Name: "backup", Unit: unit(), Command: []string{"pg_dump", "--file=/var/backups/pg"}}
+	if err := in.Execute(context.Background(), st, func(string) {}); err != nil {
+		t.Fatal(err)
+	}
+	if cmds := r.of("command"); len(cmds) != 1 || cmds[0].pattern != "a" || cmds[0].args != "'pg_dump' '--file=/var/backups/pg'" {
+		t.Errorf("the action: %+v", cmds)
+	}
+}
+
 // apply, wait and hook of nothing are an error.
 func TestNoUnit(t *testing.T) {
 	in := configure(t, target.Settings{"hosts_a_host": "10.0.0.1"})

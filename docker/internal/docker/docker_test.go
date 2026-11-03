@@ -447,3 +447,28 @@ func TestReach(t *testing.T) {
 		t.Errorf("across hosts: %+v", res.Reach)
 	}
 }
+
+// An action of the pack runs in the key's first instance as it runs: docker exec, its output the step's events.
+func TestExecInTheInstance(t *testing.T) {
+	dir := t.TempDir()
+	bin, log := filepath.Join(dir, "docker"), filepath.Join(dir, "args")
+	script := "#!/bin/sh\necho \"$@\" >> " + log + "\n[ \"$1\" = exec ] && echo dumped\n[ \"$3\" != fail ]\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	in := configure(t, "dev", map[string]string{"docker": bin})
+	u := render.Unit{Key: "pg", Image: "images/postgres:16", Replicas: 2}
+	var said []string
+	st := target.Step{Key: "pg", Kind: "exec", Name: "backup", Unit: &u, Command: []string{"pg_dump", "--file=/var/lib/postgresql/data/b"}}
+	if err := in.Execute(context.Background(), st, func(l string) { said = append(said, l) }); err != nil {
+		t.Fatal(err)
+	}
+	args, _ := os.ReadFile(log)
+	if strings.TrimSpace(string(args)) != "exec dev-pg-0 pg_dump --file=/var/lib/postgresql/data/b" || len(said) != 1 || said[0] != "dumped" {
+		t.Errorf("args %q, said %v", args, said)
+	}
+	st.Command = []string{"fail"}
+	if err := in.Execute(context.Background(), st, nil); err == nil || !strings.Contains(err.Error(), "exec backup in dev-pg-0") {
+		t.Errorf("a command that fails: %v", err)
+	}
+}

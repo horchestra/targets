@@ -60,6 +60,8 @@ type Installation struct {
 	clientset  kubernetes.Interface
 	clientErr  error
 	restConfig *rest.Config
+	// execIn runs a command in a pod's container: nil — the API server's exec (remoteExec); a test sets its own.
+	execIn execer
 	// storeMu serializes keep's read-modify-write of a secret of the store: steps run side by side, KV v2 has no CAS
 	storeMu sync.Mutex
 

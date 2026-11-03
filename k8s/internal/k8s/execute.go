@@ -126,6 +126,8 @@ func (in *Installation) Execute(ctx context.Context, st target.Step, events func
 		return in.removeAccess(ctx, st.Key, timeout, events)
 	case "hook":
 		return in.hook(ctx, st, timeout, events)
+	case "exec":
+		return in.exec(ctx, st, timeout, events)
 	}
 	return fmt.Errorf("step %d: %q is no step kind", st.N, st.Kind)
 }

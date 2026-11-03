@@ -117,8 +117,31 @@ func (in *Installation) Execute(ctx context.Context, st target.Step, events func
 		return nil
 	case "hook":
 		return in.hook(ctx, st, timeout, events)
+	case "exec":
+		return in.exec(ctx, st, timeout, events)
 	}
 	return fmt.Errorf("step %d: %q is no step kind", st.N, st.Kind)
+}
+
+// exec runs the step's command in the key's first instance as it runs — docker exec — with the instance's files,
+// data and network: an action of the pack (pack run), a backup that reads the server where it is.
+func (in *Installation) exec(ctx context.Context, st target.Step, timeout time.Duration, events func(string)) error {
+	if st.Unit == nil {
+		return fmt.Errorf("exec %s: no unit", st.Name)
+	}
+	if len(st.Command) == 0 {
+		return fmt.Errorf("exec %s: no command", st.Name)
+	}
+	c, err := in.container(*st.Unit, 0)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	if _, err := c.Engine.docker(ctx, nil, nil, events, append([]string{"exec", c.Name}, st.Command...)...); err != nil {
+		return fmt.Errorf("exec %s in %s: %w", st.Name, c.Name, err)
+	}
+	return nil
 }
 
 // apply brings the key's containers to what the unit says: a container whose
