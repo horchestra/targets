@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	if err := remote.Serve("docker", docker.Factory, remote.CapRecord); err != nil {
+	if err := remote.Serve("docker", docker.Factory, remote.CapRecord, remote.CapDiscover); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "pack-target-docker:", err)
 		os.Exit(1)
 	}

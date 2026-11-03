@@ -47,3 +47,5 @@ require (
 replace github.com/arenadata/oci-packer v0.0.0 => github.com/arenadata/oci-packer v0.0.0-20261102083223-1b89cf940950
 
 replace github.com/arenadata/oci-packer/types v0.0.0 => github.com/arenadata/oci-packer/types v0.0.0-20261102083223-1b89cf940950
+
+replace github.com/horchestra/pack => ../..

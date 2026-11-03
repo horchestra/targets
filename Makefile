@@ -36,14 +36,16 @@ dist: oci-proxy ## per platform archives for a release: dist/pack-target-<name>_
 REGISTRY ?= ghcr.io/horchestra
 VERSION  ?= dev
 IMAGE_PLATFORMS ?= linux/amd64,linux/arm64
+# the checkout of pack around this one, when there is: what a go.mod's replace of pack with ../.. builds against
+PACK_CONTEXT := $(if $(wildcard ../go.mod),--build-context pack=$(abspath ..),)
 
 images: ## the images pack runs a target from (runtime: docker): $(REGISTRY)/targets/<name>:$(VERSION), for this machine's arch; PUSH=1 builds them for IMAGE_PLATFORMS and pushes them
 	@for t in $(TARGETS); do \
 		echo "image $(REGISTRY)/targets/$$t:$(VERSION)"; \
 		if [ -n "$(PUSH)" ]; then \
-			docker buildx build --platform $(IMAGE_PLATFORMS) --push -t $(REGISTRY)/targets/$$t:$(VERSION) $$t || exit 1; \
+			docker buildx build $(PACK_CONTEXT) --platform $(IMAGE_PLATFORMS) --push -t $(REGISTRY)/targets/$$t:$(VERSION) $$t || exit 1; \
 		else \
-			docker build -t $(REGISTRY)/targets/$$t:$(VERSION) $$t || exit 1; \
+			docker build $(PACK_CONTEXT) -t $(REGISTRY)/targets/$$t:$(VERSION) $$t || exit 1; \
 		fi; \
 	done
 

@@ -6,11 +6,21 @@
 ARG GO=1.27
 ARG PYTHON=3.13
 
+# pack, when the build is given its checkout (--build-context pack=<dir>): a go.mod that replaces pack with ../..
+# builds against it; without, the replace goes and the module's own require is built
+FROM scratch AS pack
+
 FROM golang:${GO} AS build
+COPY --from=pack / /pack/
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN go mod download
+RUN go mod edit -dropreplace github.com/horchestra/pack \
+ && if [ -f /pack/go.mod ]; then go mod edit -replace github.com/horchestra/pack=/pack; fi \
+ && go mod download
 COPY . .
+# the go.mod of the sources again: the same replace
+RUN go mod edit -dropreplace github.com/horchestra/pack \
+ && if [ -f /pack/go.mod ]; then go mod edit -replace github.com/horchestra/pack=/pack; fi
 # the oci-proxy programs the target carries to the hosts, embedded in it
 RUN for a in amd64 arm64; do \
       CGO_ENABLED=0 GOOS=linux GOARCH=$a go build -trimpath -ldflags='-s -w' -o internal/ansible/ociproxy/oci-proxy-linux-$a ./cmd/oci-proxy || exit 1; \

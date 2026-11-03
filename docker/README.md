@@ -104,6 +104,12 @@ or in the `state` file (0600), or — credentials — in the secret store.
 
 Docker ≥ 26 on every engine; every image on each engine or pullable by it; no failover across hosts.
 
+## Facts (`pack discover`)
+
+Each engine's: what `docker info` says of the machine it runs on — the OS, the architecture, CPUs, memory, the
+engine's version and clock — and the ports its containers publish there. A host of `discover.hosts` is an engine's
+name in `hosts`; the one engine is `engine`.
+
 ## In a container
 
 `ghcr.io/horchestra/targets/docker:<version>` is the program with the docker CLI; pack runs it with

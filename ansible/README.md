@@ -53,6 +53,14 @@ keys:
 | hook   | the hook's command (`command`, never a shell) on the key's first host                                                                  |
 | remove | stops the services, deletes the files the key delivered. **The packages stay**: another key may need them                              |
 
+## Facts (`pack discover`)
+
+Each host's, by ad-hoc commands of built-in modules: `setup` (the OS and its version, the architecture, CPUs, memory,
+the mounts and their free space, the resolvers, the clock, the service manager), `ss -Htlnup` (what listens, and which
+process, where ss can tell), `docker version` (the engine, where there is one). A host without ss or docker tells
+none of that, and is no failure; a host that does not answer is told as unreachable, with why, and the others' facts
+are still told.
+
 ## Packages from a registry
 
 A package repository can be kept in the registry the packs are in, as an artifact whose files keep their paths

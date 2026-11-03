@@ -58,6 +58,11 @@ ConfigMap `pack-<installation>`.
 | hook   | a Job of the hook's image and command, with the key's files and env                                                  |
 | remove | deletes the workload, the Service and the config Secrets; the claims stay                                            |
 
+## Facts (`pack discover`)
+
+The cluster's: its nodes — the OS of their image, the architecture, the CPUs and memory allocatable to pods, the
+internal address, the container runtime — the version of its API, and its storage classes, the default one first.
+
 ## Not in this target
 
 A job that publishes credentials for the keys after it (docker does; here the certificates are cert-manager's), objects
