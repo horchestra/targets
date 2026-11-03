@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	if err := remote.Serve("ansible", ansible.Factory, remote.CapRecord, remote.CapDiscover); err != nil {
+	if err := remote.Serve("ansible", ansible.Factory, remote.CapRecord, remote.CapDiscover, remote.CapLogs, remote.CapHealth); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "pack-target-ansible:", err)
 		os.Exit(1)
 	}

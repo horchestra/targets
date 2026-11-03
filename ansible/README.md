@@ -61,6 +61,11 @@ process, where ss can tell), `docker version` (the engine, where there is one). 
 none of that, and is no failure; a host that does not answer is told as unreachable, with why, and the others' facts
 are still told.
 
+## Logs and health (`pack diagnose`)
+
+The logs of a key are, on each of its hosts, the tail of the journal of its services (`services` of its entry), or
+of the host's errors when it names none (`journalctl -p err`); its health is `systemctl is-active` of its services.
+
 ## Packages from a registry
 
 A package repository can be kept in the registry the packs are in, as an artifact whose files keep their paths

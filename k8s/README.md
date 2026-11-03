@@ -63,6 +63,11 @@ ConfigMap `pack-<installation>`.
 The cluster's: its nodes — the OS of their image, the architecture, the CPUs and memory allocatable to pods, the
 internal address, the container runtime — the version of its API, and its storage classes, the default one first.
 
+## Logs and health (`pack diagnose`)
+
+The logs of a key are the tail of each of its pods — of the run before too, when the pod restarted; its health is
+each pod ready, with why one is not (the reason of the container that waits or terminated).
+
 ## Not in this target
 
 A job that publishes credentials for the keys after it (docker does; here the certificates are cert-manager's), objects

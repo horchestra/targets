@@ -82,3 +82,25 @@ func (o *oneDown) Run(ctx context.Context, pattern, module, args string, events 
 	}
 	return o.fakeRunner.Run(ctx, pattern, module, args, events)
 }
+
+// The journal of the key's services on its hosts, or the host's errors when it names none.
+func TestLogsAndHealth(t *testing.T) {
+	in := configure(t, target.Settings{"hosts_a_host": "10.0.0.1", "hosts_b_host": "10.0.0.2"})
+	r := &fakeRunner{}
+	in.runner = r
+	logs, err := in.Logs(context.Background(), "pg", 20)
+	if err != nil || len(logs) != 2 {
+		t.Fatalf("logs %v %v", logs, err)
+	}
+	calls := r.of("command")
+	if len(calls) != 2 || !strings.Contains(calls[0].args, "journalctl --no-pager -n 20 -u postgresql") {
+		t.Errorf("the services' journal: %+v", calls)
+	}
+	if _, err := in.Logs(context.Background(), "client", 5); err != nil || !strings.Contains(r.of("command")[2].args, "-p err") {
+		t.Errorf("no services named: the host's errors: %+v %v", r.of("command"), err)
+	}
+	h, err := in.Health(context.Background())
+	if err != nil || len(h["pg"].Instances) != 2 {
+		t.Fatalf("health %+v %v", h, err)
+	}
+}

@@ -110,6 +110,11 @@ Each engine's: what `docker info` says of the machine it runs on — the OS, the
 engine's version and clock — and the ports its containers publish there. A host of `discover.hosts` is an engine's
 name in `hosts`; the one engine is `engine`.
 
+## Logs and health (`pack diagnose`)
+
+The logs of a key are the tail of `docker logs` of each container of its workload, stdout and stderr; its health is
+each container running, and healthy where it has a healthcheck.
+
 ## In a container
 
 `ghcr.io/horchestra/targets/docker:<version>` is the program with the docker CLI; pack runs it with

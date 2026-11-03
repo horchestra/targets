@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	if err := remote.Serve("k8s", k8s.Factory, remote.CapRecord, remote.CapDiscover); err != nil {
+	if err := remote.Serve("k8s", k8s.Factory, remote.CapRecord, remote.CapDiscover, remote.CapLogs, remote.CapHealth); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "pack-target-k8s:", err)
 		os.Exit(1)
 	}

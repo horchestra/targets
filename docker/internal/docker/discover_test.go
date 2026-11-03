@@ -29,3 +29,20 @@ func TestOSOf(t *testing.T) {
 		t.Errorf("arch %s", a)
 	}
 }
+
+func TestInstanceHealth(t *testing.T) {
+	for _, c := range []struct {
+		state, status string
+		ready         bool
+	}{
+		{"running", "Up 3 minutes (healthy)", true},
+		{"running", "Up 3 minutes", true},
+		{"running", "Up 10 seconds (health: starting)", false},
+		{"running", "Up 3 minutes (unhealthy)", false},
+		{"exited", "Exited (1) 2 minutes ago", false},
+	} {
+		if got := instanceHealth("c", c.state, c.status); got.Ready != c.ready || !got.Ready && len(got.Reason) == 0 {
+			t.Errorf("%s %q: %+v", c.state, c.status, got)
+		}
+	}
+}

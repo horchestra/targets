@@ -36,3 +36,22 @@ func TestDiscover(t *testing.T) {
 		t.Errorf("classes = %v: the default first", f.StorageClasses)
 	}
 }
+
+func TestHealth(t *testing.T) {
+	in := &Installation{installation: "prod", namespace: "data"}
+	in.once.Do(func() {})
+	l := map[string]string{labelName: "pg", labelInstance: "prod", labelManagedBy: "pack"}
+	in.clientset = k8sfake.NewClientset(
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pg-0", Namespace: "data", Labels: l}, Status: corev1.PodStatus{Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pg-1", Namespace: "data", Labels: l}, Status: corev1.PodStatus{Phase: corev1.PodPending,
+			ContainerStatuses: []corev1.ContainerStatus{{State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff"}}}}}},
+	)
+	h, err := in.Health(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h["pg"].Ready || len(h["pg"].Instances) != 2 || h["pg"].Instances[1].Reason != "ImagePullBackOff" && h["pg"].Instances[0].Reason != "ImagePullBackOff" {
+		t.Errorf("health = %+v", h)
+	}
+}
