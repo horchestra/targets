@@ -31,6 +31,7 @@ require (
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/horchestra/pack/sdk v0.0.0 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/klauspost/compress v1.20.3 // indirect
@@ -80,3 +81,5 @@ replace github.com/arenadata/oci-packer v0.0.0 => github.com/arenadata/oci-packe
 replace github.com/arenadata/oci-packer/types v0.0.0 => github.com/arenadata/oci-packer/types v0.0.0-20261102181558-71b5d3d6c5ee
 
 replace github.com/horchestra/pack => ../..
+
+replace github.com/horchestra/pack/sdk => ../../sdk

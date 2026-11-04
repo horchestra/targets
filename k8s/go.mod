@@ -46,6 +46,7 @@ require (
 	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
+	github.com/horchestra/pack/sdk v0.0.0 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -103,3 +104,5 @@ replace github.com/arenadata/oci-packer v0.0.0 => github.com/arenadata/oci-packe
 replace github.com/arenadata/oci-packer/types v0.0.0 => github.com/arenadata/oci-packer/types v0.0.0-20261102083223-1b89cf940950
 
 replace github.com/horchestra/pack => ../..
+
+replace github.com/horchestra/pack/sdk => ../../sdk
