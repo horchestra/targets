@@ -10,6 +10,9 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
+
+	"github.com/horchestra/pack/pkg/logging"
 )
 
 // Runner is the transport: one ansible ad-hoc command. It is an interface so
@@ -80,6 +83,7 @@ func (r *ansibleRunner) Run(ctx context.Context, pattern, module, args string, e
 		sc.Buffer(make([]byte, 64<<10), 1<<20)
 		for sc.Scan() {
 			l := sc.Text()
+			logging.For("ansible").Trace().Str("module", module).Str("hosts", pattern).Msg(l)
 			if events != nil {
 				events(l)
 			}
@@ -88,9 +92,13 @@ func (r *ansibleRunner) Run(ctx context.Context, pattern, module, args string, e
 			}
 		}
 	}()
+	start := time.Now()
 	err := cmd.Run()
 	_ = pw.Close()
 	<-done
+	// not its args: a copy carries a file's content, which may be rendered with a secret
+	logging.For("ansible").Debug().Str("module", module).Str("hosts", pattern).Bool("become", r.become).
+		Dur("took", time.Since(start)).Err(err).Msg("ansible")
 	if err != nil {
 		return fmt.Errorf("%s on %s: %w: %s", module, pattern, err, strings.Join(tail, "; "))
 	}

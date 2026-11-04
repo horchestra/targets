@@ -10,6 +10,9 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/horchestra/pack/pkg/logging"
 )
 
 // engine is one Docker engine the installation runs on: a host of the
@@ -59,7 +62,11 @@ func (e *engine) docker(ctx context.Context, stdin io.Reader, env []string, even
 	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	start := time.Now()
 	err = cmd.Run()
+	// the arguments: a secret reaches docker through its environment, never its argv (materialize) — env is not logged
+	logging.For("docker").Debug().Str("engine", e.name).Strs("args", args).Dur("took", time.Since(start)).
+		Int("stdout_bytes", stdout.Len()).Err(err).Msg("docker")
 	if events != nil {
 		sc := bufio.NewScanner(bytes.NewReader(stdout.Bytes()))
 		for sc.Scan() {

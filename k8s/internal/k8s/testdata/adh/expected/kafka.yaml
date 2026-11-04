@@ -37,12 +37,12 @@ metadata:
 spec:
   clusterIP: None
   ports:
-  - name: broker
-    port: 9092
-    targetPort: 9092
-  - name: internal
-    port: 9093
-    targetPort: 9093
+    - name: broker
+      port: 9092
+      targetPort: 9092
+    - name: internal
+      port: 9093
+      targetPort: 9093
   publishNotReadyAddresses: true
   selector:
     app.kubernetes.io/instance: prod
@@ -80,82 +80,82 @@ spec:
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchLabels:
-                app.kubernetes.io/instance: prod
-                app.kubernetes.io/managed-by: pack
-                app.kubernetes.io/name: kafka
-            topologyKey: kubernetes.io/hostname
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/instance: prod
+                  app.kubernetes.io/managed-by: pack
+                  app.kubernetes.io/name: kafka
+              topologyKey: kubernetes.io/hostname
       containers:
-      - args:
-        - --override
-        - min.insync.replicas=2
-        env:
-        - name: KAFKA_HEAP_OPTS
-          value: -Xmx24576m -Xms24576m -XX:+UseG1GC
-        image: images/kafka:3.7.1
-        name: kafka
-        ports:
-        - containerPort: 9092
-          name: broker
-        - containerPort: 9093
-          name: internal
-        readinessProbe:
-          tcpSocket:
-            port: 9092
-        resources:
-          limits:
-            memory: 32Gi
-          requests:
-            cpu: "8"
-            memory: 32Gi
-        volumeMounts:
-        - mountPath: /var/lib/kafka/data
-          name: data
-        - mountPath: /opt/java
-          name: lib-0
-          readOnly: true
-        - mountPath: /opt/kafka/config/kafka_jaas.conf
-          name: cfg-0
-          readOnly: true
-          subPath: kafka_jaas.conf
-        - mountPath: /opt/kafka/config/server.properties
-          name: cfg-0
-          readOnly: true
-          subPath: server.properties
-        - mountPath: /opt/kafka/config/keystore.jks
-          name: sec-0
-          readOnly: true
-          subPath: keystore.jks
+        - args:
+            - --override
+            - min.insync.replicas=2
+          env:
+            - name: KAFKA_HEAP_OPTS
+              value: -Xmx24576m -Xms24576m -XX:+UseG1GC
+          image: images/kafka:3.7.1
+          name: kafka
+          ports:
+            - containerPort: 9092
+              name: broker
+            - containerPort: 9093
+              name: internal
+          readinessProbe:
+            tcpSocket:
+              port: 9092
+          resources:
+            limits:
+              memory: 32Gi
+            requests:
+              cpu: "8"
+              memory: 32Gi
+          volumeMounts:
+            - mountPath: /var/lib/kafka/data
+              name: data
+            - mountPath: /opt/java
+              name: lib-0
+              readOnly: true
+            - mountPath: /opt/kafka/config/kafka_jaas.conf
+              name: cfg-0
+              readOnly: true
+              subPath: kafka_jaas.conf
+            - mountPath: /opt/kafka/config/server.properties
+              name: cfg-0
+              readOnly: true
+              subPath: server.properties
+            - mountPath: /opt/kafka/config/keystore.jks
+              name: sec-0
+              readOnly: true
+              subPath: keystore.jks
       nodeSelector:
         node-role.kubernetes.io/data: "true"
       volumes:
-      - image:
-          pullPolicy: IfNotPresent
-          reference: images/jdk:21.0.4
-        name: lib-0
-      - name: cfg-0
-        secret:
-          items:
-          - key: kafka_jaas.conf
-            mode: 256
-            path: kafka_jaas.conf
-          - key: server.properties
-            path: server.properties
-          secretName: prod-kafka-opt-kafka-config
-      - name: sec-0
-        secret:
-          items:
-          - key: keystore.jks
-            mode: 256
-            path: keystore.jks
-          secretName: prod-kafka-tls
+        - image:
+            pullPolicy: IfNotPresent
+            reference: images/jdk:21.0.4
+          name: lib-0
+        - name: cfg-0
+          secret:
+            items:
+              - key: kafka_jaas.conf
+                mode: 256
+                path: kafka_jaas.conf
+              - key: server.properties
+                path: server.properties
+            secretName: prod-kafka-opt-kafka-config
+        - name: sec-0
+          secret:
+            items:
+              - key: keystore.jks
+                mode: 256
+                path: keystore.jks
+            secretName: prod-kafka-tls
   volumeClaimTemplates:
-  - metadata:
-      name: data
-    spec:
-      accessModes:
-      - ReadWriteOnce
-      resources:
-        requests:
-          storage: 4Ti
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 4Ti

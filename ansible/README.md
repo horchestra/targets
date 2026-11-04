@@ -1,12 +1,14 @@
 # ansible — classic hosts as a target
 
 `target: ansible` runs `pack-target-ansible`, a program of its own (a module with its own `go.mod` and `main.go`; see
-[docs/targets.md](https://github.com/horchestra/pack/blob/main/docs/targets.md)). A pack goes to hosts that SSH reaches — VMs, bare metal — named by an
+[docs/targets.md](https://github.com/horchestra/pack/blob/main/docs/targets.md)). A pack goes to hosts that SSH
+reaches — VMs, bare metal — named by an
 ansible inventory or by the environment's `hosts`. A key runs no container: the target installs the OS packages its
 entry names, delivers its rendered config files to its hosts and starts and enables its systemd services.
 
 **Ansible is only a transport.** Every step is ad-hoc commands (`ansible <pattern> -m <module> -a …`) of the built-in
-modules `package`, `apt`, `copy`, `get_url`, `file`, `service`, `setup`, `wait_for` and `command`. The saga — hooks, order, waits, rollback — is pack's; no
+modules `package`, `apt`, `copy`, `get_url`, `file`, `service`, `setup`, `wait_for` and `command`. The saga — hooks,
+order, waits, rollback — is pack's; no
 YAML
 of the operator's is ever run.
 
@@ -24,11 +26,11 @@ of the operator's is ever run.
 
 ## A key's entry (`keys:`)
 
-| Entry      | Meaning                                                                                                                                                  |
-|------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Entry      | Meaning                                                                                                                                                                                                                       |
+|------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `packages` | OS packages installed on the key's hosts: a list for every host, or a map `{debian-13: […], fedora: […], RedHat: […]}`, the most exact name a host goes by winning. Over what the pack says, or an OS the pack does not know. |
-| `hosts`    | Which hosts the key runs on, instance `i` on the `i`-th. Default: every host of the environment; with an `inventory` of your own, name them.             |
-| `services` | The systemd units the key manages, over what the pack says: started and enabled at apply, restarted when a file of the key changed, verified `active` at wait, stopped at stop and remove. |
+| `hosts`    | Which hosts the key runs on, instance `i` on the `i`-th. Default: every host of the environment; with an `inventory` of your own, name them.                                                                                  |
+| `services` | The systemd units the key manages, over what the pack says: started and enabled at apply, restarted when a file of the key changed, verified `active` at wait, stopped at stop and remove.                                    |
 
 `replicas`, `resources`, `labels` and `reach` are the environment's too, but this target has no scheduler: `resources`
 say nothing here. A key is reached at its first host's address; with replicas, an instance per host.
@@ -45,13 +47,13 @@ keys:
 
 ## Steps
 
-| Step   |                                                                                                                                        |
-|--------|----------------------------------------------------------------------------------------------------------------------------------------|
+| Step   |                                                                                                                                                                                                                                                                                                                                                                                                                           |
+|--------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | apply  | a pack with `Packages`: the entry of the host's OS, in its order, with `${os:…}` resolved. Otherwise the key's packages (`package`), its files (`copy`, the mode kept, `${secret:…}` resolved). Starts and enables the services; restarts them only where a file changed, what a playbook's `notify` does. `Content` of the pack's root is the image's and is not delivered here: a host gets the files of its OS's entry |
-| wait   | `systemctl is-active` per service until every one is active on every host, or the timeout                                              |
-| stop   | `service state=stopped`                                                                                                                |
-| hook   | the hook's command (`command`, never a shell) on the key's first host                                                                  |
-| remove | stops the services, deletes the files the key delivered. **The packages stay**: another key may need them                              |
+| wait   | `systemctl is-active` per service until every one is active on every host, or the timeout                                                                                                                                                                                                                                                                                                                                 |
+| stop   | `service state=stopped`                                                                                                                                                                                                                                                                                                                                                                                                   |
+| hook   | the hook's command (`command`, never a shell) on the key's first host                                                                                                                                                                                                                                                                                                                                                     |
+| remove | stops the services, deletes the files the key delivered. **The packages stay**: another key may need them                                                                                                                                                                                                                                                                                                                 |
 
 ## Facts (`pack discover`)
 
@@ -87,7 +89,8 @@ names, what the packages depend on and what ansible's modules need (`python3-apt
 own repository, or there beforehand. `make oci-proxy` builds the programs the target embeds (linux/amd64, linux/arm64).
 
 `oci-proxy` runs on its own too, configured by the environment alone: `OCI_PROXY_REGISTRY`, `OCI_PROXY_ADDR`,
-`OCI_PROXY_PLAIN_HTTP`, `OCI_PROXY_USER`, `OCI_PROXY_PASSWORD`. On SIGTERM it finishes the requests under way and exits 0.
+`OCI_PROXY_PLAIN_HTTP`, `OCI_PROXY_USER`, `OCI_PROXY_PASSWORD`. On SIGTERM it finishes the requests under way and exits
+0.
 
 ## Secrets and state
 
@@ -95,6 +98,14 @@ own repository, or there beforehand. `make oci-proxy` builds the programs the ta
 the value travels in the arguments of the `copy` module (encrypted by SSH, visible in the process list of the machine
 that runs ansible for the command's run). The record and the credentials are kept in the `state` file (JSON, 0600, in a
 0700 directory, written by rename under a lock; credentials in plain text).
+
+## The log
+
+The target logs at the level pack gives it
+([docs/commands.md](https://github.com/horchestra/pack/blob/main/docs/commands.md#the-log)):
+at `debug` each step and each ad-hoc command — its module, its hosts, how long, how it ended, never its arguments (a
+`copy` carries a file, which may be rendered with a secret); at `trace` each line ansible writes. Run by hand, it
+logs at `PACK_LOG_LEVEL` in `PACK_LOG_FORMAT` (`console` or `json`).
 
 ## Requirements
 

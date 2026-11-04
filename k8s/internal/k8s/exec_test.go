@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/horchestra/pack/pkg/target"
@@ -21,9 +20,9 @@ func TestExecInThePod(t *testing.T) {
 	in := &Installation{installation: "dev", namespace: "pack"}
 	in.once.Do(func() {})
 	in.clientset = k8sfake.NewClientset(&corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "dev-pg-0", Namespace: "pack"},
-		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "postgres"}}},
-		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+		Name: "dev-pg-0", Namespace: "pack",
+		Spec:   corev1.PodSpec{Containers: []corev1.Container{{Name: "postgres"}}},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	})
 	var got string
 	in.execIn = func(_ context.Context, pod, container string, command []string, stdout, stderr io.Writer) error {

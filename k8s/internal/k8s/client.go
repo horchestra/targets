@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -27,6 +28,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+
+	"github.com/horchestra/pack/pkg/logging"
 )
 
 // poll is how often a wait looks at the cluster again.
@@ -52,6 +55,8 @@ func (in *Installation) connect() {
 			return
 		}
 		cfg.UserAgent = "pack-provider-k8s"
+		cfg.Wrap(func(rt http.RoundTripper) http.RoundTripper { return logging.Transport("k8s-api", rt) }) // each request at trace
+		logging.For("k8s").Debug().Str("host", cfg.Host).Str("context", in.context).Str("namespace", in.namespace).Msg("cluster")
 		in.restConfig = cfg
 		if in.client, in.clientErr = client.New(cfg, client.Options{Scheme: scheme.Scheme}); in.clientErr != nil {
 			return
@@ -131,15 +136,18 @@ func (in *Installation) applyOne(ctx context.Context, c client.Client, u *unstru
 	}
 	// the server's answer goes into u
 	if err := c.Apply(ctx, client.ApplyConfigurationFromUnstructured(u), client.FieldOwner("pack"), client.ForceOwnership); err != nil {
+		logging.For("k8s").Debug().Str("kind", u.GetKind()).Str("object", u.GetNamespace()+"/"+u.GetName()).Err(err).Msg("apply")
 		return "", err
 	}
+	how := "configured"
 	switch {
 	case created:
-		return "created", nil
+		how = "created"
 	case before.GetResourceVersion() == u.GetResourceVersion():
-		return "unchanged", nil
+		how = "unchanged"
 	}
-	return "configured", nil
+	logging.For("k8s").Debug().Str("kind", u.GetKind()).Str("object", u.GetNamespace()+"/"+u.GetName()).Str("result", how).Msg("apply")
+	return how, nil
 }
 
 // removed are the kinds remove deletes: a key's workload, Service and

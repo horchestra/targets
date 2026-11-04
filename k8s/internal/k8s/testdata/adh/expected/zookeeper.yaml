@@ -52,15 +52,15 @@ metadata:
 spec:
   clusterIP: None
   ports:
-  - name: client
-    port: 2181
-    targetPort: 2181
-  - name: election
-    port: 3888
-    targetPort: 3888
-  - name: peer
-    port: 2888
-    targetPort: 2888
+    - name: client
+      port: 2181
+      targetPort: 2181
+    - name: election
+      port: 3888
+      targetPort: 3888
+    - name: peer
+      port: 2888
+      targetPort: 2888
   publishNotReadyAddresses: true
   selector:
     app.kubernetes.io/instance: prod
@@ -98,79 +98,79 @@ spec:
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchLabels:
-                app.kubernetes.io/instance: prod
-                app.kubernetes.io/managed-by: pack
-                app.kubernetes.io/name: zookeeper
-            topologyKey: kubernetes.io/hostname
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/instance: prod
+                  app.kubernetes.io/managed-by: pack
+                  app.kubernetes.io/name: zookeeper
+              topologyKey: kubernetes.io/hostname
       containers:
-      - env:
-        - name: JVMFLAGS
-          value: -Xmx768m -Xms768m -XX:+UseG1GC
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        image: images/zookeeper:3.9.2
-        name: zookeeper
-        ports:
-        - containerPort: 2181
-          name: client
-        - containerPort: 3888
-          name: election
-        - containerPort: 2888
-          name: peer
-        readinessProbe:
-          tcpSocket:
-            port: 2181
-        resources:
-          limits:
-            memory: 1Gi
-          requests:
-            cpu: 500m
-            memory: 1Gi
-        volumeMounts:
-        - mountPath: /var/lib/zookeeper
-          name: data
-        - mountPath: /opt/java
-          name: lib-0
-          readOnly: true
-        - mountPath: /conf/zoo.cfg
-          name: cfg-0
-          readOnly: true
-          subPath: zoo.cfg
-        - mountPath: /var/lib/zookeeper/myid
-          name: cfg-1
-          readOnly: true
-          subPathExpr: $(POD_NAME)/myid
+        - env:
+            - name: JVMFLAGS
+              value: -Xmx768m -Xms768m -XX:+UseG1GC
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          image: images/zookeeper:3.9.2
+          name: zookeeper
+          ports:
+            - containerPort: 2181
+              name: client
+            - containerPort: 3888
+              name: election
+            - containerPort: 2888
+              name: peer
+          readinessProbe:
+            tcpSocket:
+              port: 2181
+          resources:
+            limits:
+              memory: 1Gi
+            requests:
+              cpu: 500m
+              memory: 1Gi
+          volumeMounts:
+            - mountPath: /var/lib/zookeeper
+              name: data
+            - mountPath: /opt/java
+              name: lib-0
+              readOnly: true
+            - mountPath: /conf/zoo.cfg
+              name: cfg-0
+              readOnly: true
+              subPath: zoo.cfg
+            - mountPath: /var/lib/zookeeper/myid
+              name: cfg-1
+              readOnly: true
+              subPathExpr: $(POD_NAME)/myid
       volumes:
-      - image:
-          pullPolicy: IfNotPresent
-          reference: images/jdk:21.0.4
-        name: lib-0
-      - name: cfg-0
-        secret:
-          items:
-          - key: zoo.cfg
-            path: zoo.cfg
-          secretName: prod-zookeeper-conf
-      - name: cfg-1
-        secret:
-          items:
-          - key: myid.0
-            path: prod-zookeeper-0/myid
-          - key: myid.1
-            path: prod-zookeeper-1/myid
-          - key: myid.2
-            path: prod-zookeeper-2/myid
-          secretName: prod-zookeeper-var-lib-zookeeper
+        - image:
+            pullPolicy: IfNotPresent
+            reference: images/jdk:21.0.4
+          name: lib-0
+        - name: cfg-0
+          secret:
+            items:
+              - key: zoo.cfg
+                path: zoo.cfg
+            secretName: prod-zookeeper-conf
+        - name: cfg-1
+          secret:
+            items:
+              - key: myid.0
+                path: prod-zookeeper-0/myid
+              - key: myid.1
+                path: prod-zookeeper-1/myid
+              - key: myid.2
+                path: prod-zookeeper-2/myid
+            secretName: prod-zookeeper-var-lib-zookeeper
   volumeClaimTemplates:
-  - metadata:
-      name: data
-    spec:
-      accessModes:
-      - ReadWriteOnce
-      resources:
-        requests:
-          storage: 10Gi
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi

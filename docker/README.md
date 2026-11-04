@@ -1,7 +1,8 @@
 # docker — Docker engines as a target
 
 `target: docker` runs `pack-target-docker`, a program of its own (this directory is a module with its own `go.mod` and
-`main.go`; see [docs/targets.md](https://github.com/horchestra/pack/blob/main/docs/targets.md)). A pack goes to one Docker engine, or to several hosts,
+`main.go`; see [docs/targets.md](https://github.com/horchestra/pack/blob/main/docs/targets.md)). A pack goes to one
+Docker engine, or to several hosts,
 each with its own engine. The target talks to every engine with the `docker` CLI: no swarm, no agent on the hosts.
 Whatever `docker --host` / `--context` can reach will do (`unix://`, `tcp://`, `ssh://`), or a host the target reaches
 itself through an [SSH tunnel to its Docker socket](#ssh-tunnel).
@@ -100,6 +101,14 @@ or in the `state` file (0600), or — credentials — in the secret store.
 `pack template` writes the rendered config files only; the containers and a compose file per engine it used to write
 (`compose: true`) are not produced by this version. Image-mount libraries have no counterpart in the render.
 
+## The log
+
+The target logs at the level pack gives it
+([docs/commands.md](https://github.com/horchestra/pack/blob/main/docs/commands.md#the-log)):
+at `debug` each step and each call of the docker CLI — its arguments (a secret reaches docker through its
+environment, never its argv), how long, how it ended; at `trace` what a step says. Run by hand, it logs at
+`PACK_LOG_LEVEL` in `PACK_LOG_FORMAT` (`console` or `json`).
+
 ## Requirements
 
 Docker ≥ 26 on every engine; every image on each engine or pullable by it; no failover across hosts.
@@ -118,7 +127,8 @@ each container running, and healthy where it has a healthcheck.
 ## In a container
 
 `ghcr.io/horchestra/targets/docker:<version>` is the program with the docker CLI; pack runs it with
-`runtime: {type: docker}` ([docs/targets.md](https://github.com/horchestra/pack/blob/main/docs/targets.md#where-a-target-runs-the-runtime)).
+`runtime: {type: docker}`
+([docs/targets.md](https://github.com/horchestra/pack/blob/main/docs/targets.md#where-a-target-runs-the-runtime)).
 The engine is reached through its socket, mounted, or over ssh as from a machine:
 
 ```yaml

@@ -17,8 +17,8 @@ services:
       interval: 5s
       retries: 3
       test:
-      - CMD-SHELL
-      - nc -z prod-hive-db 5432 || bash -c '</dev/tcp/prod-hive-db/5432'
+        - CMD-SHELL
+        - nc -z prod-hive-db 5432 || bash -c '</dev/tcp/prod-hive-db/5432'
       timeout: 3s
     hostname: prod-hive-db
     image: images/postgres:16.3
@@ -31,17 +31,17 @@ services:
     mem_reservation: 4294967296
     restart: unless-stopped
     volumes:
-    - source: data-prod-hive-db
-      target: /var/lib/postgresql/data
-      type: volume
-    - read_only: true
-      source: ./files/prod-hive-db/etc/postgresql/postgresql.conf
-      target: /etc/postgresql/postgresql.conf
-      type: bind
+      - source: data-prod-hive-db
+        target: /var/lib/postgresql/data
+        type: volume
+      - read_only: true
+        source: ./files/prod-hive-db/etc/postgresql/postgresql.conf
+        target: /etc/postgresql/postgresql.conf
+        type: bind
   kafka-0:
     command:
-    - --override
-    - min.insync.replicas=2
+      - --override
+      - min.insync.replicas=2
     container_name: prod-kafka-0
     cpu_shares: 8192
     domainname: prod
@@ -51,8 +51,8 @@ services:
       interval: 5s
       retries: 3
       test:
-      - CMD-SHELL
-      - nc -z prod-kafka-0 9092 || bash -c '</dev/tcp/prod-kafka-0/9092'
+        - CMD-SHELL
+        - nc -z prod-kafka-0 9092 || bash -c '</dev/tcp/prod-kafka-0/9092'
       timeout: 3s
     hostname: prod-kafka-0
     image: images/kafka:3.7.1
@@ -66,31 +66,31 @@ services:
     networks:
       default:
         aliases:
-        - prod-kafka
+          - prod-kafka
     restart: unless-stopped
     secrets:
-    - source: pack_secret_prod_kafka_tls_keystore_jks
-      target: /opt/kafka/config/keystore.jks
+      - source: pack_secret_prod_kafka_tls_keystore_jks
+        target: /opt/kafka/config/keystore.jks
     volumes:
-    - source: data-prod-kafka-0
-      target: /var/lib/kafka/data
-      type: volume
-    - read_only: true
-      source: images/jdk:21.0.4
-      target: /opt/java
-      type: image
-    - read_only: true
-      source: ./files/prod-kafka-0/opt/kafka/config/kafka_jaas.conf
-      target: /opt/kafka/config/kafka_jaas.conf
-      type: bind
-    - read_only: true
-      source: ./files/prod-kafka-0/opt/kafka/config/server.properties
-      target: /opt/kafka/config/server.properties
-      type: bind
+      - source: data-prod-kafka-0
+        target: /var/lib/kafka/data
+        type: volume
+      - read_only: true
+        source: images/jdk:21.0.4
+        target: /opt/java
+        type: image
+      - read_only: true
+        source: ./files/prod-kafka-0/opt/kafka/config/kafka_jaas.conf
+        target: /opt/kafka/config/kafka_jaas.conf
+        type: bind
+      - read_only: true
+        source: ./files/prod-kafka-0/opt/kafka/config/server.properties
+        target: /opt/kafka/config/server.properties
+        type: bind
   kafka-1:
     command:
-    - --override
-    - min.insync.replicas=2
+      - --override
+      - min.insync.replicas=2
     container_name: prod-kafka-1
     cpu_shares: 8192
     domainname: prod
@@ -100,8 +100,8 @@ services:
       interval: 5s
       retries: 3
       test:
-      - CMD-SHELL
-      - nc -z prod-kafka-1 9092 || bash -c '</dev/tcp/prod-kafka-1/9092'
+        - CMD-SHELL
+        - nc -z prod-kafka-1 9092 || bash -c '</dev/tcp/prod-kafka-1/9092'
       timeout: 3s
     hostname: prod-kafka-1
     image: images/kafka:3.7.1
@@ -115,31 +115,31 @@ services:
     networks:
       default:
         aliases:
-        - prod-kafka
+          - prod-kafka
     restart: unless-stopped
     secrets:
-    - source: pack_secret_prod_kafka_tls_keystore_jks
-      target: /opt/kafka/config/keystore.jks
+      - source: pack_secret_prod_kafka_tls_keystore_jks
+        target: /opt/kafka/config/keystore.jks
     volumes:
-    - source: data-prod-kafka-1
-      target: /var/lib/kafka/data
-      type: volume
-    - read_only: true
-      source: images/jdk:21.0.4
-      target: /opt/java
-      type: image
-    - read_only: true
-      source: ./files/prod-kafka-1/opt/kafka/config/kafka_jaas.conf
-      target: /opt/kafka/config/kafka_jaas.conf
-      type: bind
-    - read_only: true
-      source: ./files/prod-kafka-1/opt/kafka/config/server.properties
-      target: /opt/kafka/config/server.properties
-      type: bind
+      - source: data-prod-kafka-1
+        target: /var/lib/kafka/data
+        type: volume
+      - read_only: true
+        source: images/jdk:21.0.4
+        target: /opt/java
+        type: image
+      - read_only: true
+        source: ./files/prod-kafka-1/opt/kafka/config/kafka_jaas.conf
+        target: /opt/kafka/config/kafka_jaas.conf
+        type: bind
+      - read_only: true
+        source: ./files/prod-kafka-1/opt/kafka/config/server.properties
+        target: /opt/kafka/config/server.properties
+        type: bind
   kafka-2:
     command:
-    - --override
-    - min.insync.replicas=2
+      - --override
+      - min.insync.replicas=2
     container_name: prod-kafka-2
     cpu_shares: 8192
     domainname: prod
@@ -149,8 +149,8 @@ services:
       interval: 5s
       retries: 3
       test:
-      - CMD-SHELL
-      - nc -z prod-kafka-2 9092 || bash -c '</dev/tcp/prod-kafka-2/9092'
+        - CMD-SHELL
+        - nc -z prod-kafka-2 9092 || bash -c '</dev/tcp/prod-kafka-2/9092'
       timeout: 3s
     hostname: prod-kafka-2
     image: images/kafka:3.7.1
@@ -164,27 +164,27 @@ services:
     networks:
       default:
         aliases:
-        - prod-kafka
+          - prod-kafka
     restart: unless-stopped
     secrets:
-    - source: pack_secret_prod_kafka_tls_keystore_jks
-      target: /opt/kafka/config/keystore.jks
+      - source: pack_secret_prod_kafka_tls_keystore_jks
+        target: /opt/kafka/config/keystore.jks
     volumes:
-    - source: data-prod-kafka-2
-      target: /var/lib/kafka/data
-      type: volume
-    - read_only: true
-      source: images/jdk:21.0.4
-      target: /opt/java
-      type: image
-    - read_only: true
-      source: ./files/prod-kafka-2/opt/kafka/config/kafka_jaas.conf
-      target: /opt/kafka/config/kafka_jaas.conf
-      type: bind
-    - read_only: true
-      source: ./files/prod-kafka-2/opt/kafka/config/server.properties
-      target: /opt/kafka/config/server.properties
-      type: bind
+      - source: data-prod-kafka-2
+        target: /var/lib/kafka/data
+        type: volume
+      - read_only: true
+        source: images/jdk:21.0.4
+        target: /opt/java
+        type: image
+      - read_only: true
+        source: ./files/prod-kafka-2/opt/kafka/config/kafka_jaas.conf
+        target: /opt/kafka/config/kafka_jaas.conf
+        type: bind
+      - read_only: true
+        source: ./files/prod-kafka-2/opt/kafka/config/server.properties
+        target: /opt/kafka/config/server.properties
+        type: bind
   ranger-db:
     container_name: prod-ranger-db
     cpu_shares: 512
@@ -196,8 +196,8 @@ services:
       interval: 5s
       retries: 3
       test:
-      - CMD-SHELL
-      - nc -z prod-ranger-db 5432 || bash -c '</dev/tcp/prod-ranger-db/5432'
+        - CMD-SHELL
+        - nc -z prod-ranger-db 5432 || bash -c '</dev/tcp/prod-ranger-db/5432'
       timeout: 3s
     hostname: prod-ranger-db
     image: images/postgres:16.3
@@ -210,13 +210,13 @@ services:
     mem_reservation: 536870912
     restart: unless-stopped
     volumes:
-    - source: data-prod-ranger-db
-      target: /var/lib/postgresql/data
-      type: volume
-    - read_only: true
-      source: ./files/prod-ranger-db/etc/postgresql/postgresql.conf
-      target: /etc/postgresql/postgresql.conf
-      type: bind
+      - source: data-prod-ranger-db
+        target: /var/lib/postgresql/data
+        type: volume
+      - read_only: true
+        source: ./files/prod-ranger-db/etc/postgresql/postgresql.conf
+        target: /etc/postgresql/postgresql.conf
+        type: bind
   zookeeper-0:
     container_name: prod-zookeeper-0
     cpu_shares: 512
@@ -227,8 +227,8 @@ services:
       interval: 5s
       retries: 3
       test:
-      - CMD-SHELL
-      - nc -z prod-zookeeper-0 2181 || bash -c '</dev/tcp/prod-zookeeper-0/2181'
+        - CMD-SHELL
+        - nc -z prod-zookeeper-0 2181 || bash -c '</dev/tcp/prod-zookeeper-0/2181'
       timeout: 3s
     hostname: prod-zookeeper-0
     image: images/zookeeper:3.9.2
@@ -242,24 +242,24 @@ services:
     networks:
       default:
         aliases:
-        - prod-zookeeper
+          - prod-zookeeper
     restart: unless-stopped
     volumes:
-    - source: data-prod-zookeeper-0
-      target: /var/lib/zookeeper
-      type: volume
-    - read_only: true
-      source: images/jdk:21.0.4
-      target: /opt/java
-      type: image
-    - read_only: true
-      source: ./files/prod-zookeeper-0/conf/zoo.cfg
-      target: /conf/zoo.cfg
-      type: bind
-    - read_only: true
-      source: ./files/prod-zookeeper-0/var/lib/zookeeper/myid
-      target: /var/lib/zookeeper/myid
-      type: bind
+      - source: data-prod-zookeeper-0
+        target: /var/lib/zookeeper
+        type: volume
+      - read_only: true
+        source: images/jdk:21.0.4
+        target: /opt/java
+        type: image
+      - read_only: true
+        source: ./files/prod-zookeeper-0/conf/zoo.cfg
+        target: /conf/zoo.cfg
+        type: bind
+      - read_only: true
+        source: ./files/prod-zookeeper-0/var/lib/zookeeper/myid
+        target: /var/lib/zookeeper/myid
+        type: bind
   zookeeper-1:
     container_name: prod-zookeeper-1
     cpu_shares: 512
@@ -270,8 +270,8 @@ services:
       interval: 5s
       retries: 3
       test:
-      - CMD-SHELL
-      - nc -z prod-zookeeper-1 2181 || bash -c '</dev/tcp/prod-zookeeper-1/2181'
+        - CMD-SHELL
+        - nc -z prod-zookeeper-1 2181 || bash -c '</dev/tcp/prod-zookeeper-1/2181'
       timeout: 3s
     hostname: prod-zookeeper-1
     image: images/zookeeper:3.9.2
@@ -285,24 +285,24 @@ services:
     networks:
       default:
         aliases:
-        - prod-zookeeper
+          - prod-zookeeper
     restart: unless-stopped
     volumes:
-    - source: data-prod-zookeeper-1
-      target: /var/lib/zookeeper
-      type: volume
-    - read_only: true
-      source: images/jdk:21.0.4
-      target: /opt/java
-      type: image
-    - read_only: true
-      source: ./files/prod-zookeeper-1/conf/zoo.cfg
-      target: /conf/zoo.cfg
-      type: bind
-    - read_only: true
-      source: ./files/prod-zookeeper-1/var/lib/zookeeper/myid
-      target: /var/lib/zookeeper/myid
-      type: bind
+      - source: data-prod-zookeeper-1
+        target: /var/lib/zookeeper
+        type: volume
+      - read_only: true
+        source: images/jdk:21.0.4
+        target: /opt/java
+        type: image
+      - read_only: true
+        source: ./files/prod-zookeeper-1/conf/zoo.cfg
+        target: /conf/zoo.cfg
+        type: bind
+      - read_only: true
+        source: ./files/prod-zookeeper-1/var/lib/zookeeper/myid
+        target: /var/lib/zookeeper/myid
+        type: bind
   zookeeper-2:
     container_name: prod-zookeeper-2
     cpu_shares: 512
@@ -313,8 +313,8 @@ services:
       interval: 5s
       retries: 3
       test:
-      - CMD-SHELL
-      - nc -z prod-zookeeper-2 2181 || bash -c '</dev/tcp/prod-zookeeper-2/2181'
+        - CMD-SHELL
+        - nc -z prod-zookeeper-2 2181 || bash -c '</dev/tcp/prod-zookeeper-2/2181'
       timeout: 3s
     hostname: prod-zookeeper-2
     image: images/zookeeper:3.9.2
@@ -328,24 +328,24 @@ services:
     networks:
       default:
         aliases:
-        - prod-zookeeper
+          - prod-zookeeper
     restart: unless-stopped
     volumes:
-    - source: data-prod-zookeeper-2
-      target: /var/lib/zookeeper
-      type: volume
-    - read_only: true
-      source: images/jdk:21.0.4
-      target: /opt/java
-      type: image
-    - read_only: true
-      source: ./files/prod-zookeeper-2/conf/zoo.cfg
-      target: /conf/zoo.cfg
-      type: bind
-    - read_only: true
-      source: ./files/prod-zookeeper-2/var/lib/zookeeper/myid
-      target: /var/lib/zookeeper/myid
-      type: bind
+      - source: data-prod-zookeeper-2
+        target: /var/lib/zookeeper
+        type: volume
+      - read_only: true
+        source: images/jdk:21.0.4
+        target: /opt/java
+        type: image
+      - read_only: true
+        source: ./files/prod-zookeeper-2/conf/zoo.cfg
+        target: /conf/zoo.cfg
+        type: bind
+      - read_only: true
+        source: ./files/prod-zookeeper-2/var/lib/zookeeper/myid
+        target: /var/lib/zookeeper/myid
+        type: bind
 volumes:
   data-prod-hive-db:
     name: data-prod-hive-db

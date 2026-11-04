@@ -29,9 +29,9 @@ metadata:
 spec:
   clusterIP: None
   ports:
-  - name: pg
-    port: 5432
-    targetPort: 5432
+    - name: pg
+      port: 5432
+      targetPort: 5432
   publishNotReadyAddresses: true
   selector:
     app.kubernetes.io/instance: prod
@@ -67,48 +67,48 @@ spec:
         app.kubernetes.io/name: hive-db
     spec:
       containers:
-      - env:
-        - name: POSTGRES_USER
-          value: postgres
-        - name: POSTGRES_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              key: password
-              name: prod-hive-db
-        image: images/postgres:16.3
-        name: hive-db
-        ports:
-        - containerPort: 5432
-          name: pg
-        readinessProbe:
-          tcpSocket:
-            port: 5432
-        resources:
-          limits:
-            memory: 4Gi
-          requests:
-            cpu: "2"
-            memory: 4Gi
-        volumeMounts:
-        - mountPath: /var/lib/postgresql/data
-          name: data
-        - mountPath: /etc/postgresql/postgresql.conf
-          name: cfg-0
-          readOnly: true
-          subPath: postgresql.conf
+        - env:
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: prod-hive-db
+          image: images/postgres:16.3
+          name: hive-db
+          ports:
+            - containerPort: 5432
+              name: pg
+          readinessProbe:
+            tcpSocket:
+              port: 5432
+          resources:
+            limits:
+              memory: 4Gi
+            requests:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: data
+            - mountPath: /etc/postgresql/postgresql.conf
+              name: cfg-0
+              readOnly: true
+              subPath: postgresql.conf
       volumes:
-      - name: cfg-0
-        secret:
-          items:
-          - key: postgresql.conf
-            path: postgresql.conf
-          secretName: prod-hive-db-etc-postgresql
+        - name: cfg-0
+          secret:
+            items:
+              - key: postgresql.conf
+                path: postgresql.conf
+            secretName: prod-hive-db-etc-postgresql
   volumeClaimTemplates:
-  - metadata:
-      name: data
-    spec:
-      accessModes:
-      - ReadWriteOnce
-      resources:
-        requests:
-          storage: 10Gi
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi

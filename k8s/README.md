@@ -1,7 +1,8 @@
 # k8s — Kubernetes as a target
 
 `target: k8s` runs `pack-target-k8s`, a program of its own (a module with its own `go.mod` and `main.go`; see
-[docs/targets.md](https://github.com/horchestra/pack/blob/main/docs/targets.md)). A pack goes to one namespace of a cluster: StatefulSets, Jobs,
+[docs/targets.md](https://github.com/horchestra/pack/blob/main/docs/targets.md)). A pack goes to one namespace of a
+cluster: StatefulSets, Jobs,
 Services and Secrets. The target performs each step against the API server with client-go, under whatever
 authentication the kubeconfig names; it needs no `kubectl`.
 
@@ -74,6 +75,15 @@ A job that publishes credentials for the keys after it (docker does; here the ce
 a pack ships to be applied to the cluster itself (the RBAC of a log shipper), image-volume libraries and pod
 anti-affinity (`spread`) have no counterpart in the render of this pack format yet.
 
+## The log
+
+The target logs at the level pack gives it
+([docs/commands.md](https://github.com/horchestra/pack/blob/main/docs/commands.md#the-log)):
+at `debug` the cluster it speaks to, each step and each object applied (its kind, name, created, configured or
+unchanged); at `trace` each request to the API server (method, URL without its query, status, time) and what a step
+says. Run in a Pod by pack's `runtime: k8s`, its log is followed by pack. Run by hand, it logs at `PACK_LOG_LEVEL`
+in `PACK_LOG_FORMAT` (`console` or `json`).
+
 ## Requirements
 
 Rights in the namespace for StatefulSets, Jobs, Services, Secrets, ConfigMaps, PVCs and pods (list, logs). The immutable
@@ -82,7 +92,8 @@ fields of a StatefulSet (`volumeClaimTemplates`, the selector) are not recreated
 ## In a container
 
 `ghcr.io/horchestra/targets/k8s:<version>` is the program alone (client-go is in it); pack runs it with
-`runtime: {type: docker}` ([docs/targets.md](https://github.com/horchestra/pack/blob/main/docs/targets.md#where-a-target-runs-the-runtime)).
+`runtime: {type: docker}`
+([docs/targets.md](https://github.com/horchestra/pack/blob/main/docs/targets.md#where-a-target-runs-the-runtime)).
 The kubeconfig is a mount; a cluster on the machine's loopback (kind, k3d) wants `network: host` on Linux.
 
 ```yaml

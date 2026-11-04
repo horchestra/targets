@@ -15,18 +15,18 @@ computed:
   /zookeeper/jdk/heapOpts: -Xmx768m -Xms768m -XX:+UseG1GC
 deps:
   kafka:
-  - zookeeper
+    - zookeeper
 installation: prod
 namespace: ""
 order:
-- zookeeper
-- kafka
-- ranger-db
-- hive-db
+  - zookeeper
+  - kafka
+  - ranger-db
+  - hive-db
 pack: adh
 peers:
-  hive-db: {}
+  hive-db: { }
   kafka:
     zk: zookeeper
-  ranger-db: {}
-  zookeeper: {}
+  ranger-db: { }
+  zookeeper: { }

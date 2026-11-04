@@ -10,7 +10,7 @@ name: release
 # a target that runs in a container (runtime: {type: docker}).
 on:
   push:
-    tags: ["docker/v*", "ansible/v*", "k8s/v*"]
+    tags: [ "docker/v*", "ansible/v*", "k8s/v*" ]
 
 permissions:
   contents: write
