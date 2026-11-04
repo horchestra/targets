@@ -29,7 +29,9 @@ import (
 //     is generated from them;
 //   - ansible: the binary, default from PATH;
 //   - state: the file that keeps the installation's record and the
-//     credentials pack provisioned, default ~/.pack/ansible-state.json;
+//     credentials pack provisioned, default ~/.pack/ansible-state.json.
+//     Not with pack's `state: db`: then the record is pack's database's,
+//     the credentials the store's, and a file is refused;
 //   - become, become_method, ssh_private_key: ansible's --become,
 //     --become-method and --private-key;
 //   - secrets_<name>_<key>: the values ${secret:<name>/<key>} names;
@@ -94,11 +96,26 @@ func Factory(installation string, set map[string]string) (target.Installation, e
 			return nil, fmt.Errorf("inventory %s: a file, not a directory", inv)
 		}
 	}
-	state, err := newFileState(settings.Get("state", "~/.pack/ansible-state.json"), installation)
-	if err != nil {
+	// With pack's state in a database the file is no place for the record (it would not outlive the run) nor for
+	// the credentials: a `state:` file is refused, and a store is required.
+	packState := settings.Get(target.SettingPackState, "")
+	if packState == "db" {
+		if path, set := set["state"]; set {
+			return nil, fmt.Errorf("state %s: pack keeps the record in its state database (state: db) — the target's file would not outlive the run; drop `state:`, the credentials are the store's", path)
+		}
+	} else {
+		file, err := newFileState(settings.Get("state", "~/.pack/ansible-state.json"), installation)
+		if err != nil {
+			return nil, err
+		}
+		in.state = file
+	}
+	if err := in.withStore(); err != nil {
 		return nil, err
 	}
-	in.state = state
+	if packState == "db" && !in.usesStore() {
+		return nil, fmt.Errorf("state: db, and no store: the credentials a job makes would not outlive the run — name store: in env.yaml (provider, addr, path)")
+	}
 	return in, nil
 }
 
@@ -124,7 +141,7 @@ type Installation struct {
 	settings     target.Settings
 	hosts        map[string]*host
 	order        []*host // by name
-	state        *fileState
+	state        state
 
 	// platform is the target's half of each key's placement as Resolve took it (packages, hosts, services): what the
 	// unit of the key is run with. Resolve is called for the installed version and the wanted one before any step,

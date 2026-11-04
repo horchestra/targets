@@ -472,3 +472,15 @@ func TestExecInTheInstance(t *testing.T) {
 		t.Errorf("a command that fails: %v", err)
 	}
 }
+
+// With pack's state in a database (pack_state: db) a file of the target's own is refused: the record would not
+// outlive the run.
+func TestStateDBRefusesAFile(t *testing.T) {
+	if _, err := Factory("dev", target.Settings{"state": filepath.Join(t.TempDir(), "state.json"), "pack_state": "db"}); err == nil ||
+		!strings.Contains(err.Error(), "state: db") {
+		t.Fatalf("a state file with state: db: %v", err)
+	}
+	if _, err := Factory("dev", target.Settings{"pack_state": "db", "store_provider": "file", "store_path": t.TempDir()}); err != nil {
+		t.Fatalf("state: db with the store for the credentials: %v", err)
+	}
+}

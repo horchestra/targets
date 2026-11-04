@@ -307,9 +307,13 @@ func (in *Installation) hook(ctx context.Context, st target.Step, events func(st
 	return nil
 }
 
-// keep stores the step's credentials in the state file.
+// keep stores the step's credentials in the state; one the store already holds where the credential says
+// (c.Store) need not be written again.
 func (in *Installation) keep(creds []render.Credential) error {
 	for _, c := range creds {
+		if len(c.Store) > 0 {
+			continue
+		}
 		if err := in.state.keep(c.Name, c.Leaf, c.Value); err != nil {
 			return err
 		}

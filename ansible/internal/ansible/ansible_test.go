@@ -670,3 +670,46 @@ func TestMirrorSettings(t *testing.T) {
 		t.Error("variables that are not set")
 	}
 }
+
+// With pack's state in a database (pack_state: db): a file of the target's own is refused, and without a store
+// the credentials a job makes would not outlive the run — refused too. With a store they are written and read.
+func TestStateDB(t *testing.T) {
+	if _, err := Factory("dev", target.Settings{"hosts_a_host": "10.0.0.1", "state": filepath.Join(t.TempDir(), "state.json"), "pack_state": "db"}); err == nil ||
+		!strings.Contains(err.Error(), "state: db") {
+		t.Fatalf("a state file with state: db: %v", err)
+	}
+	if _, err := Factory("dev", target.Settings{"hosts_a_host": "10.0.0.1", "pack_state": "db"}); err == nil ||
+		!strings.Contains(err.Error(), "no store") {
+		t.Fatalf("state: db without a store: %v", err)
+	}
+	dir := t.TempDir()
+	inst, err := Factory("dev", target.Settings{"hosts_a_host": "10.0.0.1", "pack_state": "db",
+		"store_provider": "file", "store_path": dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := inst.(*Installation)
+	if !in.usesStore() {
+		t.Fatal("the store is not plugged in")
+	}
+	if _, _, err := in.ReadInstalled(); err == nil || !strings.Contains(err.Error(), "state database") {
+		t.Fatalf("the record is pack's, the target keeps none: %v", err)
+	}
+	if err := in.state.keep("pg", "password", "s3cret"); err != nil {
+		t.Fatal(err)
+	}
+	if v, ok, err := in.state.secret("pg", "password"); err != nil || !ok || v != "s3cret" {
+		t.Fatalf("read back from the store: %q %v %v", v, ok, err)
+	}
+	if ents, _ := os.ReadDir(os.Getenv("HOME")); slices.Contains(entsNames(ents), ".pack") {
+		t.Error("no file of the target's own is made")
+	}
+}
+
+func entsNames(ents []os.DirEntry) []string {
+	out := make([]string, 0, len(ents))
+	for _, e := range ents {
+		out = append(out, e.Name())
+	}
+	return out
+}

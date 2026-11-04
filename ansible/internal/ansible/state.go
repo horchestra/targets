@@ -14,6 +14,16 @@ import (
 	"unicode/utf8"
 )
 
+// state is where the installation's record and the credentials pack provisioned are kept: a file (fileState),
+// or — the credentials — the environment's secret store over it (storeState, store.go).
+type state interface {
+	read() ([]byte, bool, error)
+	write(record []byte) error
+	remove() error
+	secret(name, key string) (string, bool, error)
+	keep(name, key, value string) error
+}
+
 // fileState keeps the state in a file, JSON, the installations it holds by
 // name — one file serves every installation of an environment:
 //

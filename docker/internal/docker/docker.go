@@ -32,7 +32,9 @@ import (
 //   - docker: the binary, default from PATH;
 //   - network: the network on each engine, default the installation's name;
 //   - state: a file that keeps the installation's record and the credentials
-//     pack provisioned; default — the engine keeps them (the first host's);
+//     pack provisioned; default — the engine keeps them (the first host's).
+//     Not with pack's `state: db`: then the record is pack's database's, the
+//     credentials the store's, and a file is refused;
 //   - secrets_<name>_<key>: the values ${secret:<name>/<key>} names;
 //
 // and of each key's entry under `keys:` (the placement) the part that is the target's: replicas, hosts, publish and
@@ -109,6 +111,9 @@ func Factory(installation string, set map[string]string) (target.Installation, e
 	}
 	in.state = engineState{in}
 	if path := settings.Get("state", ""); len(path) > 0 {
+		if settings.Get(target.SettingPackState, "") == "db" {
+			return nil, fmt.Errorf("state %s: pack keeps the record in its state database (state: db) — the target's file would not outlive the run; drop `state:`, the credentials are the store's", path)
+		}
 		file, err := newFileState(path, installation)
 		if err != nil {
 			return nil, err
