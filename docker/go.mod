@@ -3,7 +3,7 @@ module github.com/horchestra/targets/docker
 go 1.27.1
 
 require (
-	github.com/horchestra/pack v0.2.0
+	github.com/horchestra/pack v0.3.0
 	golang.org/x/crypto v0.58.0
 )
 
@@ -15,11 +15,11 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
-	github.com/arenadata/oci-packer/types v0.0.0 // indirect
+	github.com/arenadata/oci-packer/types v1.0.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.6.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/horchestra/pack/sdk v0.0.0 // indirect
+	github.com/horchestra/pack/sdk v1.0.0 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
@@ -47,11 +47,3 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
-
-replace github.com/arenadata/oci-packer v0.0.0 => github.com/arenadata/oci-packer v0.0.0-20261102083223-1b89cf940950
-
-replace github.com/arenadata/oci-packer/types v0.0.0 => github.com/arenadata/oci-packer/types v0.0.0-20261102083223-1b89cf940950
-
-replace github.com/horchestra/pack => ../..
-
-replace github.com/horchestra/pack/sdk => ../../sdk
