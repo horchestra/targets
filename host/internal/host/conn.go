@@ -453,6 +453,20 @@ func (c *conn) removeFile(ctx context.Context, path string) error {
 	return nil
 }
 
+// fetch downloads the URL to the path on the host — the agent's own HTTP client — and says whether that changed
+// it.
+func (c *conn) fetch(ctx context.Context, url, path string, mode uint32) (bool, error) {
+	s, err := c.client(ctx)
+	if err != nil {
+		return false, err
+	}
+	res, err := s.cli.Fetch(ctx, &agentpb.FetchRequest{Url: url, Path: path, Mode: mode})
+	if err != nil {
+		return false, fmt.Errorf("%s%s: %w", c.h.prefix(), url, err)
+	}
+	return res.Changed, nil
+}
+
 // proxyStart serves the registry's artifacts on the host's loopback; proxyStop takes it away.
 func (c *conn) proxyStart(ctx context.Context, m *mirror) error {
 	s, err := c.client(ctx)

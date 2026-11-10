@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -106,13 +107,13 @@ func packagesOf(v any) (all []string, byOS map[string][]string) {
 var aptEnv = []string{"DEBIAN_FRONTEND=noninteractive", "APT_LISTCHANGES_FRONTEND=none"}
 
 // installNames installs the packages on the host: apt on debian, dnf on rhel. A name with :// is a package file
-// to fetch first (the mirror serves it over the loopback).
+// the agent fetches first (the mirror serves it over the loopback).
 func (c *conn) installNames(ctx context.Context, f osFacts, names []string, events func(string)) error {
 	var plain []string
 	for _, n := range names {
 		n = f.resolve(n)
 		if strings.Contains(n, "://") {
-			if _, err := c.exec(ctx, []string{"sh", "-c", fetchScript(n, "/tmp/pack-package")}, nil, nil, events); err != nil {
+			if _, err := c.fetch(ctx, n, "/tmp/pack-package", 0o644); err != nil {
 				return err
 			}
 			switch f.family {
@@ -144,31 +145,12 @@ func (c *conn) installNames(ctx context.Context, f osFacts, names []string, even
 	return fmt.Errorf("%sthe OS family %q is not known (debian, rhel)", c.h.prefix(), f.family)
 }
 
-// fetchScript downloads url to dest: curl, else wget (a curl built without HTTPS fails an https URL, and the
-// other one has TLS).
-func fetchScript(url, dest string) string {
-	return fmt.Sprintf(
-		`if { command -v curl >/dev/null 2>&1 && curl -fsSL -o %[2]s %[1]s; } || `+
-			`{ command -v wget >/dev/null 2>&1 && wget -qO %[2]s %[1]s; }; then exit 0; `+
-			`else echo 'download failed: no working curl/wget, or the URL is unreachable' >&2; exit 1; fi`,
-		shellQuote(url), shellQuote(dest))
-}
-
-// deliverURL puts a URL's content at the path and says whether that changed it: fetched to a temporary file,
-// compared, installed when it differs.
-func (c *conn) deliverURL(ctx context.Context, f osFacts, path, url string, mode uint32, events func(string)) (bool, error) {
+// deliverURL puts a URL's content at the path and says whether that changed it: the agent's own download.
+func (c *conn) deliverURL(ctx context.Context, f osFacts, path, url string, mode uint32) (bool, error) {
 	if mode == 0 {
 		mode = 0o644
 	}
-	tmp := "/tmp/pack-deliver"
-	script := fetchScript(f.resolve(url), tmp) + fmt.Sprintf(` && `+
-		`if [ -f %[1]s ] && cmp -s %[2]s %[1]s; then rm -f %[2]s; echo SAME; `+
-		`else install -D -m %[3]o %[2]s %[1]s && rm -f %[2]s && echo CHANGED; fi`, shellQuote(path), shellQuote(tmp), mode)
-	out, err := c.exec(ctx, []string{"sh", "-c", script}, nil, nil, events)
-	if err != nil {
-		return false, err
-	}
-	return strings.Contains(string(out), "CHANGED"), nil
+	return c.fetch(ctx, f.resolve(url), path, mode)
 }
 
 // deliver puts a file on the host and says whether that changed it: its bytes, or a download.
@@ -178,7 +160,7 @@ func (c *conn) deliver(ctx context.Context, f osFacts, file render.File, resolve
 		mode = uint32(file.Mode.Perm())
 	}
 	if len(file.URL) > 0 {
-		return c.deliverURL(ctx, f, file.Path, file.URL, mode, events)
+		return c.deliverURL(ctx, f, file.Path, file.URL, mode)
 	}
 	s, err := substitute(string(file.Content), resolve)
 	if err != nil {
@@ -194,6 +176,9 @@ func (in *Installation) applyPackages(ctx context.Context, cn *conn, u render.Un
 		if err := cn.installNames(ctx, f, p.Prepare, events); err != nil {
 			return err
 		}
+	}
+	if err := cn.applyKernel(ctx, u.Key, p, events); err != nil {
+		return err
 	}
 	repoChanged := false
 	for _, file := range p.Repo {
@@ -225,6 +210,47 @@ func (in *Installation) applyPackages(ctx context.Context, cn *conn, u render.Un
 		changed = changed || ch
 	}
 	return cn.startServices(ctx, p.Services, changed, events)
+}
+
+// kernelFiles are the drop-ins a key's Sysctls and Modules are kept in.
+func kernelFiles(key string) (sysctl, modules string) {
+	return "/etc/sysctl.d/90-pack-" + key + ".conf", "/etc/modules-load.d/pack-" + key + ".conf"
+}
+
+// applyKernel loads the key's kernel modules and sets its sysctls, each kept in a drop-in of the OS so a boot
+// brings them back. sysctl is asked again only when the file changed; modprobe is idempotent by itself.
+func (c *conn) applyKernel(ctx context.Context, key string, p *render.Packages, events func(string)) error {
+	sysctlF, modulesF := kernelFiles(key)
+	if len(p.Modules) > 0 {
+		var b strings.Builder
+		for _, m := range p.Modules {
+			b.WriteString(m + "\n")
+		}
+		if _, err := c.writeFile(ctx, modulesF, []byte(b.String()), 0o644); err != nil {
+			return err
+		}
+		for _, m := range p.Modules {
+			if _, err := c.exec(ctx, []string{"modprobe", m}, nil, nil, events); err != nil {
+				return fmt.Errorf("modprobe %s: %w", m, err)
+			}
+		}
+	}
+	if len(p.Sysctls) > 0 {
+		var b strings.Builder
+		for _, k := range slices.Sorted(maps.Keys(p.Sysctls)) {
+			fmt.Fprintf(&b, "%s=%s\n", k, p.Sysctls[k])
+		}
+		ch, err := c.writeFile(ctx, sysctlF, []byte(b.String()), 0o644)
+		if err != nil {
+			return err
+		}
+		if ch {
+			if _, err := c.exec(ctx, []string{"sysctl", "-p", sysctlF}, nil, nil, events); err != nil {
+				return fmt.Errorf("sysctl: %w", err)
+			}
+		}
+	}
+	return nil
 }
 
 // startServices starts and enables the units; changed is the notify: they are restarted, once they run.
@@ -409,6 +435,13 @@ func (in *Installation) removeFiles(ctx context.Context, u render.Unit, events f
 		for _, f := range u.SecretFiles {
 			if err := cn.removeFile(ctx, f.Path); err != nil {
 				return fmt.Errorf("%s: %s: %w", u.Key, f.Path, err)
+			}
+		}
+		// the kernel's drop-ins go too; what the kernel already learned (a module loaded, a sysctl set) stays
+		sysctlF, modulesF := kernelFiles(u.Key)
+		for _, path := range []string{sysctlF, modulesF} {
+			if err := cn.removeFile(ctx, path); err != nil {
+				return fmt.Errorf("%s: %s: %w", u.Key, path, err)
 			}
 		}
 	}

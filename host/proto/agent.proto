@@ -27,6 +27,10 @@ service Agent {
   rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
   // RemoveFile deletes path; one that is not there is no error.
   rpc RemoveFile(RemoveFileRequest) returns (RemoveFileResponse);
+  // Fetch downloads url to path with the mode (0644 when none), with the agent's own HTTP client — no curl or
+  // wget of the host's is asked for. It says whether anything changed: what was already exactly the download is
+  // left alone.
+  rpc Fetch(FetchRequest) returns (FetchResponse);
   // ProxyStart serves the files of OCI artifacts of a registry over HTTP on 127.0.0.1:port — GET
   // /<repo>:<tag>/<file> — so that apt and dnf take a package repository kept in the registry. One proxy an
   // agent: a start replaces the one that runs.
@@ -73,6 +77,16 @@ message RemoveFileRequest {
 
 message RemoveFileResponse {
   bool removed = 1;
+}
+
+message FetchRequest {
+  string url = 1;
+  string path = 2;
+  uint32 mode = 3; // the permission bits; 0 — 0644
+}
+
+message FetchResponse {
+  bool changed = 1; // the file or its mode changed
 }
 
 message ProxyStartRequest {

@@ -13,7 +13,8 @@ The doing is the **agent**'s: a small binary (`cmd/agent`, linux/amd64 and linux
 into the driver) the target carries to each host — it checks the sha256 of what is there and uploads over the SSH
 session's stdin only when it differs. The agent listens on the host's loopback, speaks `pack.agent.v1`
 (`proto/agent.proto`) and lives exactly as long as the SSH session; the driver reaches it through the connection
-and asks it to run the package manager, deliver a file, drive systemctl/sysctl/modprobe or the docker CLI, and
+and asks it to run the package manager, deliver a file or fetch a URL with its own HTTP client (no curl or wget
+of the host's), drive systemctl/sysctl/modprobe or the docker CLI, and
 serve the files of an OCI artifact over the loopback. No ansible, no python on the hosts — sshd is all a host
 needs.
 
@@ -21,6 +22,10 @@ The SSH user is root, or has **passwordless sudo** (the agent runs under `sudo -
 ssh agent, else `~/.ssh/id_ed25519, id_ecdsa, id_rsa` (a passphrase from `PACK_SSH_PASSPHRASE`); the host key is
 checked against `known_hosts` unless `insecure: true`. A connection that dies is dialed again, the agent started
 anew, and the saga repeats the step — every step is safe to repeat.
+
+What a host needs, beyond sshd: **apt** or **dnf** and **systemd** for a packages key (Debian and RHEL families),
+**sysctl** and **modprobe** (procps, kmod) when the pack sets `sysctls`/`modules`, the **docker CLI** and its
+engine for a containers key. No curl or wget: a URL a pack names is the agent's own download.
 
 ## Settings
 

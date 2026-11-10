@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -158,5 +160,46 @@ func TestAuth(t *testing.T) {
 	cli := agentpb.NewAgentClient(gc)
 	if _, err := cli.Info(context.Background(), &agentpb.InfoRequest{}); err == nil {
 		t.Error("a call without the token is served")
+	}
+}
+
+func TestFetch(t *testing.T) {
+	cli := serve(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/missing" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte("downloaded"))
+	}))
+	t.Cleanup(srv.Close)
+
+	path := filepath.Join(t.TempDir(), "sub", "pkg.deb")
+	res, err := cli.Fetch(ctx(), &agentpb.FetchRequest{Url: srv.URL + "/f", Path: path, Mode: 0o600})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Changed {
+		t.Error("first fetch: changed = false")
+	}
+	b, _ := os.ReadFile(path)
+	if string(b) != "downloaded" {
+		t.Errorf("content = %q", b)
+	}
+	if st, _ := os.Stat(path); st.Mode().Perm() != 0o600 {
+		t.Errorf("mode = %o", st.Mode().Perm())
+	}
+	res, err = cli.Fetch(ctx(), &agentpb.FetchRequest{Url: srv.URL + "/f", Path: path, Mode: 0o600})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Changed {
+		t.Error("the same fetch: changed = true")
+	}
+	if _, err := cli.Fetch(ctx(), &agentpb.FetchRequest{Url: srv.URL + "/missing", Path: path}); err == nil {
+		t.Error("a 404 is no error")
+	}
+	if _, err := cli.Fetch(ctx(), &agentpb.FetchRequest{Url: srv.URL + "/f", Path: "relative"}); err == nil {
+		t.Error("a relative path is accepted")
 	}
 }

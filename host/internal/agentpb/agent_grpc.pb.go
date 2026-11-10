@@ -34,6 +34,7 @@ const (
 	Agent_Exec_FullMethodName       = "/pack.agent.v1.Agent/Exec"
 	Agent_WriteFile_FullMethodName  = "/pack.agent.v1.Agent/WriteFile"
 	Agent_RemoveFile_FullMethodName = "/pack.agent.v1.Agent/RemoveFile"
+	Agent_Fetch_FullMethodName      = "/pack.agent.v1.Agent/Fetch"
 	Agent_ProxyStart_FullMethodName = "/pack.agent.v1.Agent/ProxyStart"
 	Agent_ProxyStop_FullMethodName  = "/pack.agent.v1.Agent/ProxyStop"
 )
@@ -54,6 +55,10 @@ type AgentClient interface {
 	WriteFile(ctx context.Context, in *WriteFileRequest, opts ...grpc.CallOption) (*WriteFileResponse, error)
 	// RemoveFile deletes path; one that is not there is no error.
 	RemoveFile(ctx context.Context, in *RemoveFileRequest, opts ...grpc.CallOption) (*RemoveFileResponse, error)
+	// Fetch downloads url to path with the mode (0644 when none), with the agent's own HTTP client — no curl or
+	// wget of the host's is asked for. It says whether anything changed: what was already exactly the download is
+	// left alone.
+	Fetch(ctx context.Context, in *FetchRequest, opts ...grpc.CallOption) (*FetchResponse, error)
 	// ProxyStart serves the files of OCI artifacts of a registry over HTTP on 127.0.0.1:port — GET
 	// /<repo>:<tag>/<file> — so that apt and dnf take a package repository kept in the registry. One proxy an
 	// agent: a start replaces the one that runs.
@@ -119,6 +124,16 @@ func (c *agentClient) RemoveFile(ctx context.Context, in *RemoveFileRequest, opt
 	return out, nil
 }
 
+func (c *agentClient) Fetch(ctx context.Context, in *FetchRequest, opts ...grpc.CallOption) (*FetchResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FetchResponse)
+	err := c.cc.Invoke(ctx, Agent_Fetch_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *agentClient) ProxyStart(ctx context.Context, in *ProxyStartRequest, opts ...grpc.CallOption) (*ProxyStartResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ProxyStartResponse)
@@ -155,6 +170,10 @@ type AgentServer interface {
 	WriteFile(context.Context, *WriteFileRequest) (*WriteFileResponse, error)
 	// RemoveFile deletes path; one that is not there is no error.
 	RemoveFile(context.Context, *RemoveFileRequest) (*RemoveFileResponse, error)
+	// Fetch downloads url to path with the mode (0644 when none), with the agent's own HTTP client — no curl or
+	// wget of the host's is asked for. It says whether anything changed: what was already exactly the download is
+	// left alone.
+	Fetch(context.Context, *FetchRequest) (*FetchResponse, error)
 	// ProxyStart serves the files of OCI artifacts of a registry over HTTP on 127.0.0.1:port — GET
 	// /<repo>:<tag>/<file> — so that apt and dnf take a package repository kept in the registry. One proxy an
 	// agent: a start replaces the one that runs.
@@ -182,6 +201,9 @@ func (UnimplementedAgentServer) WriteFile(context.Context, *WriteFileRequest) (*
 }
 func (UnimplementedAgentServer) RemoveFile(context.Context, *RemoveFileRequest) (*RemoveFileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RemoveFile not implemented")
+}
+func (UnimplementedAgentServer) Fetch(context.Context, *FetchRequest) (*FetchResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Fetch not implemented")
 }
 func (UnimplementedAgentServer) ProxyStart(context.Context, *ProxyStartRequest) (*ProxyStartResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ProxyStart not implemented")
@@ -275,6 +297,24 @@ func _Agent_RemoveFile_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Agent_Fetch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FetchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServer).Fetch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Agent_Fetch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServer).Fetch(ctx, req.(*FetchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Agent_ProxyStart_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ProxyStartRequest)
 	if err := dec(in); err != nil {
@@ -329,6 +369,10 @@ var Agent_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveFile",
 			Handler:    _Agent_RemoveFile_Handler,
+		},
+		{
+			MethodName: "Fetch",
+			Handler:    _Agent_Fetch_Handler,
 		},
 		{
 			MethodName: "ProxyStart",

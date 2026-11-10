@@ -456,6 +456,110 @@ func (x *RemoveFileResponse) GetRemoved() bool {
 	return false
 }
 
+type FetchRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Url           string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	Mode          uint32                 `protobuf:"varint,3,opt,name=mode,proto3" json:"mode,omitempty"` // the permission bits; 0 — 0644
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FetchRequest) Reset() {
+	*x = FetchRequest{}
+	mi := &file_agent_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FetchRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FetchRequest) ProtoMessage() {}
+
+func (x *FetchRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FetchRequest.ProtoReflect.Descriptor instead.
+func (*FetchRequest) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *FetchRequest) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *FetchRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *FetchRequest) GetMode() uint32 {
+	if x != nil {
+		return x.Mode
+	}
+	return 0
+}
+
+type FetchResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Changed       bool                   `protobuf:"varint,1,opt,name=changed,proto3" json:"changed,omitempty"` // the file or its mode changed
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FetchResponse) Reset() {
+	*x = FetchResponse{}
+	mi := &file_agent_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FetchResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FetchResponse) ProtoMessage() {}
+
+func (x *FetchResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FetchResponse.ProtoReflect.Descriptor instead.
+func (*FetchResponse) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *FetchResponse) GetChanged() bool {
+	if x != nil {
+		return x.Changed
+	}
+	return false
+}
+
 type ProxyStartRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Registry      string                 `protobuf:"bytes,1,opt,name=registry,proto3" json:"registry,omitempty"`                     // the registry, as the host reaches it
@@ -469,7 +573,7 @@ type ProxyStartRequest struct {
 
 func (x *ProxyStartRequest) Reset() {
 	*x = ProxyStartRequest{}
-	mi := &file_agent_proto_msgTypes[8]
+	mi := &file_agent_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -481,7 +585,7 @@ func (x *ProxyStartRequest) String() string {
 func (*ProxyStartRequest) ProtoMessage() {}
 
 func (x *ProxyStartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[8]
+	mi := &file_agent_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -494,7 +598,7 @@ func (x *ProxyStartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProxyStartRequest.ProtoReflect.Descriptor instead.
 func (*ProxyStartRequest) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{8}
+	return file_agent_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ProxyStartRequest) GetRegistry() string {
@@ -540,7 +644,7 @@ type ProxyStartResponse struct {
 
 func (x *ProxyStartResponse) Reset() {
 	*x = ProxyStartResponse{}
-	mi := &file_agent_proto_msgTypes[9]
+	mi := &file_agent_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -552,7 +656,7 @@ func (x *ProxyStartResponse) String() string {
 func (*ProxyStartResponse) ProtoMessage() {}
 
 func (x *ProxyStartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[9]
+	mi := &file_agent_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -565,7 +669,7 @@ func (x *ProxyStartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProxyStartResponse.ProtoReflect.Descriptor instead.
 func (*ProxyStartResponse) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{9}
+	return file_agent_proto_rawDescGZIP(), []int{11}
 }
 
 type ProxyStopRequest struct {
@@ -576,7 +680,7 @@ type ProxyStopRequest struct {
 
 func (x *ProxyStopRequest) Reset() {
 	*x = ProxyStopRequest{}
-	mi := &file_agent_proto_msgTypes[10]
+	mi := &file_agent_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -588,7 +692,7 @@ func (x *ProxyStopRequest) String() string {
 func (*ProxyStopRequest) ProtoMessage() {}
 
 func (x *ProxyStopRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[10]
+	mi := &file_agent_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -601,7 +705,7 @@ func (x *ProxyStopRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProxyStopRequest.ProtoReflect.Descriptor instead.
 func (*ProxyStopRequest) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{10}
+	return file_agent_proto_rawDescGZIP(), []int{12}
 }
 
 type ProxyStopResponse struct {
@@ -612,7 +716,7 @@ type ProxyStopResponse struct {
 
 func (x *ProxyStopResponse) Reset() {
 	*x = ProxyStopResponse{}
-	mi := &file_agent_proto_msgTypes[11]
+	mi := &file_agent_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -624,7 +728,7 @@ func (x *ProxyStopResponse) String() string {
 func (*ProxyStopResponse) ProtoMessage() {}
 
 func (x *ProxyStopResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[11]
+	mi := &file_agent_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -637,7 +741,7 @@ func (x *ProxyStopResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProxyStopResponse.ProtoReflect.Descriptor instead.
 func (*ProxyStopResponse) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{11}
+	return file_agent_proto_rawDescGZIP(), []int{13}
 }
 
 var File_agent_proto protoreflect.FileDescriptor
@@ -669,7 +773,13 @@ const file_agent_proto_rawDesc = "" +
 	"\x11RemoveFileRequest\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\".\n" +
 	"\x12RemoveFileResponse\x12\x18\n" +
-	"\aremoved\x18\x01 \x01(\bR\aremoved\"\x9a\x01\n" +
+	"\aremoved\x18\x01 \x01(\bR\aremoved\"H\n" +
+	"\fFetchRequest\x12\x10\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x12\n" +
+	"\x04mode\x18\x03 \x01(\rR\x04mode\")\n" +
+	"\rFetchResponse\x12\x18\n" +
+	"\achanged\x18\x01 \x01(\bR\achanged\"\x9a\x01\n" +
 	"\x11ProxyStartRequest\x12\x1a\n" +
 	"\bregistry\x18\x01 \x01(\tR\bregistry\x12\x1d\n" +
 	"\n" +
@@ -679,13 +789,14 @@ const file_agent_proto_rawDesc = "" +
 	"\x04port\x18\x05 \x01(\rR\x04port\"\x14\n" +
 	"\x12ProxyStartResponse\"\x12\n" +
 	"\x10ProxyStopRequest\"\x13\n" +
-	"\x11ProxyStopResponse2\xce\x03\n" +
+	"\x11ProxyStopResponse2\x92\x04\n" +
 	"\x05Agent\x12?\n" +
 	"\x04Info\x12\x1a.pack.agent.v1.InfoRequest\x1a\x1b.pack.agent.v1.InfoResponse\x12>\n" +
 	"\x04Exec\x12\x1a.pack.agent.v1.ExecRequest\x1a\x18.pack.agent.v1.ExecEvent0\x01\x12N\n" +
 	"\tWriteFile\x12\x1f.pack.agent.v1.WriteFileRequest\x1a .pack.agent.v1.WriteFileResponse\x12Q\n" +
 	"\n" +
-	"RemoveFile\x12 .pack.agent.v1.RemoveFileRequest\x1a!.pack.agent.v1.RemoveFileResponse\x12Q\n" +
+	"RemoveFile\x12 .pack.agent.v1.RemoveFileRequest\x1a!.pack.agent.v1.RemoveFileResponse\x12B\n" +
+	"\x05Fetch\x12\x1b.pack.agent.v1.FetchRequest\x1a\x1c.pack.agent.v1.FetchResponse\x12Q\n" +
 	"\n" +
 	"ProxyStart\x12 .pack.agent.v1.ProxyStartRequest\x1a!.pack.agent.v1.ProxyStartResponse\x12N\n" +
 	"\tProxyStop\x12\x1f.pack.agent.v1.ProxyStopRequest\x1a .pack.agent.v1.ProxyStopResponseB=Z;github.com/horchestra/targets/host/internal/agentpb;agentpbb\x06proto3"
@@ -702,7 +813,7 @@ func file_agent_proto_rawDescGZIP() []byte {
 	return file_agent_proto_rawDescData
 }
 
-var file_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_agent_proto_goTypes = []any{
 	(*InfoRequest)(nil),        // 0: pack.agent.v1.InfoRequest
 	(*InfoResponse)(nil),       // 1: pack.agent.v1.InfoResponse
@@ -712,26 +823,30 @@ var file_agent_proto_goTypes = []any{
 	(*WriteFileResponse)(nil),  // 5: pack.agent.v1.WriteFileResponse
 	(*RemoveFileRequest)(nil),  // 6: pack.agent.v1.RemoveFileRequest
 	(*RemoveFileResponse)(nil), // 7: pack.agent.v1.RemoveFileResponse
-	(*ProxyStartRequest)(nil),  // 8: pack.agent.v1.ProxyStartRequest
-	(*ProxyStartResponse)(nil), // 9: pack.agent.v1.ProxyStartResponse
-	(*ProxyStopRequest)(nil),   // 10: pack.agent.v1.ProxyStopRequest
-	(*ProxyStopResponse)(nil),  // 11: pack.agent.v1.ProxyStopResponse
+	(*FetchRequest)(nil),       // 8: pack.agent.v1.FetchRequest
+	(*FetchResponse)(nil),      // 9: pack.agent.v1.FetchResponse
+	(*ProxyStartRequest)(nil),  // 10: pack.agent.v1.ProxyStartRequest
+	(*ProxyStartResponse)(nil), // 11: pack.agent.v1.ProxyStartResponse
+	(*ProxyStopRequest)(nil),   // 12: pack.agent.v1.ProxyStopRequest
+	(*ProxyStopResponse)(nil),  // 13: pack.agent.v1.ProxyStopResponse
 }
 var file_agent_proto_depIdxs = []int32{
 	0,  // 0: pack.agent.v1.Agent.Info:input_type -> pack.agent.v1.InfoRequest
 	2,  // 1: pack.agent.v1.Agent.Exec:input_type -> pack.agent.v1.ExecRequest
 	4,  // 2: pack.agent.v1.Agent.WriteFile:input_type -> pack.agent.v1.WriteFileRequest
 	6,  // 3: pack.agent.v1.Agent.RemoveFile:input_type -> pack.agent.v1.RemoveFileRequest
-	8,  // 4: pack.agent.v1.Agent.ProxyStart:input_type -> pack.agent.v1.ProxyStartRequest
-	10, // 5: pack.agent.v1.Agent.ProxyStop:input_type -> pack.agent.v1.ProxyStopRequest
-	1,  // 6: pack.agent.v1.Agent.Info:output_type -> pack.agent.v1.InfoResponse
-	3,  // 7: pack.agent.v1.Agent.Exec:output_type -> pack.agent.v1.ExecEvent
-	5,  // 8: pack.agent.v1.Agent.WriteFile:output_type -> pack.agent.v1.WriteFileResponse
-	7,  // 9: pack.agent.v1.Agent.RemoveFile:output_type -> pack.agent.v1.RemoveFileResponse
-	9,  // 10: pack.agent.v1.Agent.ProxyStart:output_type -> pack.agent.v1.ProxyStartResponse
-	11, // 11: pack.agent.v1.Agent.ProxyStop:output_type -> pack.agent.v1.ProxyStopResponse
-	6,  // [6:12] is the sub-list for method output_type
-	0,  // [0:6] is the sub-list for method input_type
+	8,  // 4: pack.agent.v1.Agent.Fetch:input_type -> pack.agent.v1.FetchRequest
+	10, // 5: pack.agent.v1.Agent.ProxyStart:input_type -> pack.agent.v1.ProxyStartRequest
+	12, // 6: pack.agent.v1.Agent.ProxyStop:input_type -> pack.agent.v1.ProxyStopRequest
+	1,  // 7: pack.agent.v1.Agent.Info:output_type -> pack.agent.v1.InfoResponse
+	3,  // 8: pack.agent.v1.Agent.Exec:output_type -> pack.agent.v1.ExecEvent
+	5,  // 9: pack.agent.v1.Agent.WriteFile:output_type -> pack.agent.v1.WriteFileResponse
+	7,  // 10: pack.agent.v1.Agent.RemoveFile:output_type -> pack.agent.v1.RemoveFileResponse
+	9,  // 11: pack.agent.v1.Agent.Fetch:output_type -> pack.agent.v1.FetchResponse
+	11, // 12: pack.agent.v1.Agent.ProxyStart:output_type -> pack.agent.v1.ProxyStartResponse
+	13, // 13: pack.agent.v1.Agent.ProxyStop:output_type -> pack.agent.v1.ProxyStopResponse
+	7,  // [7:14] is the sub-list for method output_type
+	0,  // [0:7] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name
@@ -748,7 +863,7 @@ func file_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_agent_proto_rawDesc), len(file_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
