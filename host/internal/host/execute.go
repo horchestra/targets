@@ -12,6 +12,10 @@ import (
 
 const defaultTimeout = 10 * time.Minute
 
+func hostHook(u *render.Unit) bool {
+	return u != nil && len(u.Image) == 0
+}
+
 // ReadInstalled reads the record from the installation's state file.
 func (in *Installation) ReadInstalled() ([]byte, bool, error) {
 	return in.state.read()
@@ -84,6 +88,9 @@ func (in *Installation) Execute(ctx context.Context, st target.Step, events func
 		}
 		return in.removeFiles(ctx, *u, events)
 	case "hook":
+		if hostHook(st.Unit) {
+			return in.execCommand(ctx, st, timeout, events)
+		}
 		return in.hook(ctx, st, timeout, events)
 	case "exec":
 		u := st.Unit
