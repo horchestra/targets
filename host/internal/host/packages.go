@@ -209,7 +209,14 @@ func (in *Installation) applyPackages(ctx context.Context, cn *conn, u render.Un
 		}
 		changed = changed || ch
 	}
-	return cn.startServices(ctx, p.Services, changed, events)
+	if err := cn.startServices(ctx, p.Services, changed, events); err != nil {
+		return err
+	}
+	rules, err := in.firewallOf(u.Key)
+	if err != nil {
+		return err
+	}
+	return cn.applyFirewall(ctx, rules, events)
 }
 
 // kernelFiles are the drop-ins a key's Sysctls and Modules are kept in.
@@ -336,7 +343,14 @@ func (in *Installation) applyFiles(ctx context.Context, cn *conn, u render.Unit,
 		}
 		changed = changed || ch
 	}
-	return cn.startServices(ctx, stringsOf(platform["services"]), changed, events)
+	if err := cn.startServices(ctx, stringsOf(platform["services"]), changed, events); err != nil {
+		return err
+	}
+	rules, err := in.firewallOf(u.Key)
+	if err != nil {
+		return err
+	}
+	return cn.applyFirewall(ctx, rules, events)
 }
 
 // secretRef is the reference a secret file resolves: <name>/<key>, and per instance <name>/<key>.<index>.
@@ -443,6 +457,13 @@ func (in *Installation) removeFiles(ctx context.Context, u render.Unit, events f
 			if err := cn.removeFile(ctx, path); err != nil {
 				return fmt.Errorf("%s: %s: %w", u.Key, path, err)
 			}
+		}
+		rules, err := in.firewallOf(u.Key)
+		if err != nil {
+			return err
+		}
+		if err := cn.removeFirewall(ctx, rules, events); err != nil {
+			return fmt.Errorf("%s: %w", u.Key, err)
 		}
 	}
 	return nil

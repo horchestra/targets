@@ -25,7 +25,9 @@ anew, and the saga repeats the step — every step is safe to repeat.
 
 What a host needs, beyond sshd: **apt** or **dnf** and **systemd** for a packages key (Debian and RHEL families),
 **sysctl** and **modprobe** (procps, kmod) when the pack sets `sysctls`/`modules`, the **docker CLI** and its
-engine for a containers key. No curl or wget: a URL a pack names is the agent's own download.
+engine for a containers key, and a firewall when the key names `firewall` — **firewalld**, **ufw** or bare
+**iptables**, whichever runs (with iptables the rules live until a boot unless the host keeps them). No curl or
+wget: a URL a pack names is the agent's own download.
 
 ## Settings
 
@@ -49,6 +51,7 @@ Of a key's entry under `keys:` (the placement) the target reads:
 | `hosts`                   | the hosts it runs on (all of them when none) | instance *i* on the *i*-th |
 | `packages`                | the package names — a list, or a map by OS (`debian-12`, `debian`, `rhel`) that adds an OS the pack does not know | — |
 | `services`                | the systemd units to start and enable | — |
+| `firewall`                | the rules to let through — `<port>[/<proto>]` or `<cidr>:<port>[/<proto>]`, tcp when no proto; on firewalld, ufw or bare iptables, whatever the host runs | — |
 | `publish`                 | — | the ports published on the host, on this machine alone (across hosts every port is published as itself) |
 | `name`, `hostname`, `aliases`, `ip`, `dns`, `user`, `groupAdd`, `sysctls`, `securityOpt`, `mounts`, `restart` | — | the container's runtime, the words of a compose file |
 

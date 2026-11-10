@@ -35,8 +35,8 @@ import (
 //     it installs;
 //   - secrets_<name>_<key>: the values ${secret:<name>/<key>} names;
 //
-// and of each key's entry under `keys:` (the placement) hosts, publish, packages, services and the runtime
-// properties (name, hostname, aliases, ip, dns, user, groupAdd, sysctls, securityOpt, mounts, restart).
+// and of each key's entry under `keys:` (the placement) hosts, publish, packages, services, firewall and the
+// runtime properties (name, hostname, aliases, ip, dns, user, groupAdd, sysctls, securityOpt, mounts, restart).
 //
 // The user the SSH connects as needs to be root, or to have passwordless sudo (the agent runs under sudo -n).
 func Factory(installation string, set map[string]string) (target.Installation, error) {
@@ -235,16 +235,16 @@ func (in *Installation) platformOf(key string, p render.Placement) (map[string]a
 	if p.Replicas != nil {
 		own["replicas"] = int64(*p.Replicas)
 	}
-	for _, k := range append([]string{"hosts", "publish", "packages", "services"}, runtimeProps...) {
+	for _, k := range append([]string{"hosts", "publish", "packages", "services", "firewall"}, runtimeProps...) {
 		if v, ok := p.Raw[k]; ok {
 			own[k] = v
 		}
 	}
 	for k := range p.Raw {
-		if k == "reach" || slices.Contains(runtimeProps, k) || k == "hosts" || k == "publish" || k == "packages" || k == "services" {
+		if k == "reach" || slices.Contains(runtimeProps, k) || k == "hosts" || k == "publish" || k == "packages" || k == "services" || k == "firewall" {
 			continue
 		}
-		return nil, fmt.Errorf("%s: keys.%s.%s: the host target has hosts, publish, packages, services, %s",
+		return nil, fmt.Errorf("%s: keys.%s.%s: the host target has hosts, publish, packages, services, firewall, %s",
 			key, key, k, strings.Join(runtimeProps, ", "))
 	}
 	if packaged(own) {
@@ -256,6 +256,8 @@ func (in *Installation) platformOf(key string, p render.Placement) (map[string]a
 		if _, ok := own["publish"]; ok {
 			return nil, fmt.Errorf("%s: publish is a container's; a key with packages or services runs none", key)
 		}
+	} else if _, ok := own["firewall"]; ok {
+		return nil, fmt.Errorf("%s: firewall is a packages key's; a container's ports are published by the engine", key)
 	}
 	return own, nil
 }
