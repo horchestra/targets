@@ -169,7 +169,7 @@ func (c *conn) deliver(ctx context.Context, f osFacts, file render.File, resolve
 	return c.writeFile(ctx, file.Path, []byte(f.resolve(s)), mode)
 }
 
-// applyPackages brings one host to its OS's entry, in the order packschema.OSPackages says. A unit is restarted
+// applyPackages brings one host to its OS's entry, in the order packschema.OSInstall says. A unit is restarted
 // only when a file of the unit changed: an apply that changes nothing touches nothing that runs.
 func (in *Installation) applyPackages(ctx context.Context, cn *conn, u render.Unit, p *render.Packages, f osFacts, resolve func(string) (string, error), events func(string)) error {
 	if len(p.Prepare) > 0 {
