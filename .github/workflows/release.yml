@@ -1,16 +1,16 @@
 name: release
 
-# a tag <target>/v* (docker/v0.1.0, ansible/v0.1.0, k8s/v0.1.0 — the tags of a Go module in a subdirectory) builds the
+# a tag <target>/v* (host/v0.1.0, k8s/v0.1.0 — the tags of a Go module in a subdirectory) builds the
 # program of that target for the platforms and attaches pack-target-<target>_<os>_<arch>.tar.gz to the release: the
 # sources release.yaml's `targets:` points at, e.g.
-#   https://github.com/horchestra/targets/releases/download/docker/v0.1.0/pack-target-docker_{os}_{arch}.tar.gz
+#   https://github.com/horchestra/targets/releases/download/host/v0.1.0/pack-target-host_{os}_{arch}.tar.gz
 #
 # It also builds the target's image for linux/amd64 and linux/arm64 and pushes it as
 # ghcr.io/horchestra/targets/<target>:<version> — what release.yaml's `targets: {<target>: {image: oci://…}}` names for
 # a target that runs in a container (runtime: {type: docker}).
 on:
   push:
-    tags: [ "docker/v*", "ansible/v*", "k8s/v*" ]
+    tags: [ "host/v*", "k8s/v*" ]
 
 permissions:
   contents: write

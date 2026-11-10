@@ -2,4 +2,5 @@
 .idea/
 .DS_Store
 /dist
-ansible/internal/ansible/ociproxy/oci-proxy-*
+host/internal/host/agentbin/pack-host-agent-*
+!host/internal/host/agentbin/.gitkeep

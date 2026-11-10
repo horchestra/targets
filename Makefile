@@ -1,23 +1,31 @@
-# targets: the programs pack starts (pack-target-docker, -ansible, -k8s).  `make help` lists the targets.
+# targets: the programs pack starts (pack-target-host, -k8s).  `make help` lists the targets.
 #
-# Each target is a Go module of its own (docker/, ansible/, k8s/) with its own go.mod and main.go.
+# Each target is a Go module of its own (host/, k8s/) with its own go.mod and main.go.
 
 GO      ?= go
 BIN     ?= bin
-TARGETS ?= docker ansible k8s
+TARGETS ?= host k8s
 
 .DEFAULT_GOAL := help
-.PHONY: help oci-proxy build dist images test vet fmt tidy install clean $(TARGETS)
+.PHONY: help agent agent-local oci-proxy build dist images test vet fmt tidy install clean $(TARGETS)
 
 help: ## list the targets
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-10s %s\n", $$1, $$2}'
 
-oci-proxy: ## the oci-proxy programs the ansible target carries to the hosts (linux/amd64, linux/arm64)
+agent: ## the agents the host target carries to the hosts (linux/amd64, linux/arm64)
 	@for a in amd64 arm64; do \
-		(cd ansible && CGO_ENABLED=0 GOOS=linux GOARCH=$$a $(GO) build -trimpath -ldflags='-s -w' -o internal/ansible/ociproxy/oci-proxy-linux-$$a ./cmd/oci-proxy) || exit 1; \
+		(cd host && CGO_ENABLED=0 GOOS=linux GOARCH=$$a $(GO) build -trimpath -ldflags='-s -w' -o internal/host/agentbin/pack-host-agent-linux-$$a ./cmd/agent) || exit 1; \
 	done
 
-build: oci-proxy ## build pack-target-docker, -ansible and -k8s into bin/
+agent-local: ## plus the agent of this machine's platform (the local mode pack's e2e uses)
+	@(cd host && CGO_ENABLED=0 $(GO) build -trimpath -ldflags='-s -w' -o internal/host/agentbin/pack-host-agent-$(shell $(GO) env GOOS)-$(shell $(GO) env GOARCH) ./cmd/agent)
+
+oci-proxy: ## the standalone oci-proxy of the e2e mirror test: bin/oci-proxy-linux-{amd64,arm64}
+	@for a in amd64 arm64; do \
+		(cd host && CGO_ENABLED=0 GOOS=linux GOARCH=$$a $(GO) build -trimpath -ldflags='-s -w' -o ../$(BIN)/oci-proxy-linux-$$a ./cmd/oci-proxy) || exit 1; \
+	done
+
+build: agent ## build pack-target-host and -k8s into bin/
 	@for t in $(TARGETS); do \
 		echo "build pack-target-$$t"; \
 		(cd $$t && $(GO) build -o ../$(BIN)/pack-target-$$t .) || exit 1; \
@@ -25,7 +33,7 @@ build: oci-proxy ## build pack-target-docker, -ansible and -k8s into bin/
 
 PLATFORMS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 
-dist: oci-proxy ## per platform archives for a release: dist/pack-target-<name>_<os>_<arch>.tar.gz (what release.yaml's targets: points at)
+dist: agent ## per platform archives for a release: dist/pack-target-<name>_<os>_<arch>.tar.gz (what release.yaml's targets: points at)
 	@for t in $(TARGETS); do for p in $(PLATFORMS); do \
 		os=$${p%/*}; arch=$${p#*/}; tmp=$$(mktemp -d); \
 		echo "dist pack-target-$$t $$os/$$arch"; \
@@ -49,7 +57,7 @@ images: ## the images pack runs a target from (runtime: docker): $(REGISTRY)/tar
 		fi; \
 	done
 
-$(TARGETS): oci-proxy ## build one of them: make docker
+$(TARGETS): agent ## build one of them: make host
 	cd $@ && $(GO) build -o ../$(BIN)/pack-target-$@ .
 
 test: ## go test -race of every module
