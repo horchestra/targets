@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+// Agent is the seam between pack-target-host (the driver) and the process it runs on a managed host — the agent.
+// The driver delivers the agent's binary to the host over SSH (or starts it locally), the agent listens on the
+// host's loopback and the driver reaches it through the SSH connection (a direct-tcpip channel). Every call
+// carries the token the driver started the agent with as the metadata pack-agent-token. The agent exits when
+// its stdin closes — the SSH session's end is its lifetime's.
+//
+// The RPCs are the primitives an installation step on a classic host needs: run a command (a package manager,
+// systemctl, sysctl, modprobe, the docker CLI — never a shell of the driver's), deliver and remove files, and
+// serve the files of an OCI artifact over HTTP on the loopback (oci-proxy, for package repositories kept in a
+// registry).
+package pack.agent.v1;
+
+option go_package = "github.com/horchestra/targets/host/internal/agentpb;agentpb";
+
+service Agent {
+  // Info is the host's identity: its OS (of /etc/os-release) and architecture — what packages are chosen by,
+  // and whether the agent the driver brought matches the host.
+  rpc Info(InfoRequest) returns (InfoResponse);
+  // Exec runs argv with the given environment added and stdin fed to it, streaming the output's lines back,
+  // stdout and stderr as they come. The last event carries the exit code; a non-zero one is not an error of the
+  // call itself.
+  rpc Exec(ExecRequest) returns (stream ExecEvent);
+  // WriteFile writes content to path with the mode (0644 when none), making the path's directory first. It says
+  // whether anything changed: a file that was already exactly this is left alone.
+  rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
+  // RemoveFile deletes path; one that is not there is no error.
+  rpc RemoveFile(RemoveFileRequest) returns (RemoveFileResponse);
+  // ProxyStart serves the files of OCI artifacts of a registry over HTTP on 127.0.0.1:port — GET
+  // /<repo>:<tag>/<file> — so that apt and dnf take a package repository kept in the registry. One proxy an
+  // agent: a start replaces the one that runs.
+  rpc ProxyStart(ProxyStartRequest) returns (ProxyStartResponse);
+  // ProxyStop takes the proxy away; none running is no error.
+  rpc ProxyStop(ProxyStopRequest) returns (ProxyStopResponse);
+}
+
+message InfoRequest {}
+
+message InfoResponse {
+  string id = 1;       // ID of /etc/os-release (debian, ubuntu, centos, …)
+  string version = 2;  // VERSION_ID's major number
+  string codename = 3; // VERSION_CODENAME
+  string family = 4;   // debian or rhel, of ID_LIKE and ID
+  string arch = 5;     // GOARCH of the agent: amd64, arm64
+}
+
+message ExecRequest {
+  repeated string argv = 1; // the program and its arguments; never a shell
+  repeated string env = 2;  // NAME=value, added to the agent's own environment
+  bytes stdin = 3;          // what the program's stdin is fed, empty — /dev/null
+}
+
+message ExecEvent {
+  string line = 1;    // a line of the output, stdout or stderr as they come
+  int32 exit = 2;     // the exit code; set in the last event alone
+  bool done = 3;      // the last event
+}
+
+message WriteFileRequest {
+  string path = 1;
+  bytes content = 2;
+  uint32 mode = 3; // the permission bits; 0 — 0644
+}
+
+message WriteFileResponse {
+  bool changed = 1; // the file or its mode changed
+}
+
+message RemoveFileRequest {
+  string path = 1;
+}
+
+message RemoveFileResponse {
+  bool removed = 1;
+}
+
+message ProxyStartRequest {
+  string registry = 1;     // the registry, as the host reaches it
+  bool plain_http = 2;     // the registry speaks http, not https
+  string username = 3;     // the registry's credentials; empty — anonymous
+  string password = 4;
+  uint32 port = 5;         // the loopback port to listen on
+}
+
+message ProxyStartResponse {}
+
+message ProxyStopRequest {}
+
+message ProxyStopResponse {}
