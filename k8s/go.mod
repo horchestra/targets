@@ -3,7 +3,7 @@ module github.com/horchestra/targets/k8s
 go 1.27.1
 
 require (
-	github.com/horchestra/pack v0.3.0
+	github.com/horchestra/pack v0.4.1
 	k8s.io/api v0.37.1
 	k8s.io/apimachinery v0.37.1
 	k8s.io/client-go v0.37.1
@@ -46,7 +46,7 @@ require (
 	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
-	github.com/horchestra/pack/sdk v1.0.0 // indirect
+	github.com/horchestra/pack/sdk v1.1.0 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
