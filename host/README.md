@@ -26,7 +26,8 @@ anew, and the saga repeats the step — every step is safe to repeat.
 What a host needs, beyond sshd: **apt** or **dnf** and **systemd** for a packages key (Debian and RHEL families),
 **sysctl** and **modprobe** (procps, kmod) when the pack sets `sysctls`/`modules`, the **docker CLI** and its
 engine for a containers key, and a firewall when the key names `firewall` — **firewalld**, **ufw** or bare
-**iptables**, whichever runs (with iptables the rules live until a boot unless the host keeps them). No curl or
+**iptables**, whichever runs (bare iptables gets the OS's persistence installed: iptables-persistent on Debian,
+iptables-services on RHEL). No curl or
 wget: a URL a pack names is the agent's own download.
 
 ## Settings

@@ -9,8 +9,8 @@ import (
 // The firewall of a packages key's hosts: the placement's `firewall` is a list of rules to let through —
 // "<port>", "<port>/<proto>" or "<cidr>:<port>/<proto>" (proto is tcp when none) — kept on whatever firewall the
 // host runs: firewalld when it is active, else an active ufw, else bare iptables. The rules go when the key is
-// removed. With iptables they live until a boot, unless the host keeps them (netfilter-persistent and the like);
-// firewalld's and ufw's are persistent by themselves.
+// removed. firewalld's and ufw's are persistent by themselves; bare iptables gets the OS's own persistence —
+// iptables-persistent (Debian) or iptables-services (RHEL), installed when neither is there.
 
 // fwRule is one parsed rule of the placement's firewall.
 type fwRule struct {
@@ -98,13 +98,84 @@ func firewallCmds(backend string, r fwRule, add bool) [][]string {
 	}
 }
 
+// lookup is the path of a program on the host; "" — there is none.
+func (c *conn) lookup(ctx context.Context, name string) string {
+	out, err := c.exec(ctx, []string{"sh", "-c", "command -v " + name}, nil, nil, nil)
+	if err != nil {
+		return ""
+	}
+	p, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
+	return p
+}
+
+// persist keeps the iptables of the host across boots, the OS's own way: netfilter-persistent when it is there,
+// else its package — iptables-persistent on debian, iptables-services on rhel (its iptables.service reads
+// /etc/sysconfig/iptables on boot). Only ever called when a rule was applied, so the install is the firewall's
+// own need.
+func (c *conn) persist(ctx context.Context, f osFacts, events func(string)) error {
+	if len(c.lookup(ctx, "netfilter-persistent")) > 0 {
+		_, err := c.exec(ctx, []string{"netfilter-persistent", "save"}, nil, nil, events)
+		return err
+	}
+	save := c.lookup(ctx, "iptables-save")
+	if len(save) == 0 {
+		return fmt.Errorf("no netfilter-persistent and no iptables-save: the rules would not outlive a boot")
+	}
+	switch f.family {
+	case "debian":
+		if _, err := c.exec(ctx, []string{"apt-get", "install", "-y", "iptables-persistent"}, aptEnv, nil, events); err != nil {
+			return err
+		}
+		_, err := c.exec(ctx, []string{"netfilter-persistent", "save"}, nil, nil, events)
+		return err
+	case "rhel":
+		if _, err := c.exec(ctx, []string{"dnf", "install", "-y", "iptables-services"}, nil, nil, events); err != nil {
+			return err
+		}
+		out, err := c.exec(ctx, []string{save}, nil, nil, nil)
+		if err != nil {
+			return err
+		}
+		if _, err := c.writeFile(ctx, "/etc/sysconfig/iptables", out, 0o600); err != nil {
+			return err
+		}
+		if _, err := c.exec(ctx, []string{"systemctl", "enable", "iptables.service"}, nil, nil, events); err != nil {
+			return err
+		}
+		return nil
+	}
+	return fmt.Errorf("%sthe OS family %q is not known (debian, rhel)", c.h.prefix(), f.family)
+}
+
+// persistAgain is persist on the removal path: the table is saved again so a removed rule stays removed. Nothing
+// is installed here — a removal on a host that never persisted is simply not saved.
+func (c *conn) persistAgain(ctx context.Context, events func(string)) {
+	if len(c.lookup(ctx, "netfilter-persistent")) > 0 {
+		if _, err := c.exec(ctx, []string{"netfilter-persistent", "save"}, nil, nil, events); err != nil {
+			events(c.h.prefix() + "netfilter-persistent save: " + err.Error())
+		}
+		return
+	}
+	save := c.lookup(ctx, "iptables-save")
+	if len(save) == 0 {
+		return
+	}
+	if _, err := c.exec(ctx, []string{"test", "-f", "/etc/sysconfig/iptables"}, nil, nil, nil); err != nil {
+		return // no iptables-services: nothing was persisted
+	}
+	if out, err := c.exec(ctx, []string{save}, nil, nil, nil); err == nil {
+		_, _ = c.writeFile(ctx, "/etc/sysconfig/iptables", out, 0o600)
+	}
+}
+
 // firewallOf is the key's parsed rules; nil when the placement names none.
 func (in *Installation) firewallOf(key string) ([]fwRule, error) {
 	return parseFirewall(stringsOf(in.platformFor(key)["firewall"]))
 }
 
-// applyFirewall lets the key's rules through on its host. iptables: -C says whether the rule is there already.
-func (c *conn) applyFirewall(ctx context.Context, rules []fwRule, events func(string)) error {
+// applyFirewall lets the key's rules through on its host. iptables: -C says whether the rule is there already,
+// and the table is persisted once the rules are in.
+func (c *conn) applyFirewall(ctx context.Context, f osFacts, rules []fwRule, events func(string)) error {
 	if len(rules) == 0 {
 		return nil
 	}
@@ -122,16 +193,19 @@ func (c *conn) applyFirewall(ctx context.Context, rules []fwRule, events func(st
 			}
 		}
 	}
-	if backend == "firewalld" {
+	switch backend {
+	case "firewalld":
 		if _, err := c.exec(ctx, []string{"firewall-cmd", "--reload"}, nil, nil, events); err != nil {
 			return err
 		}
+	case "iptables":
+		return c.persist(ctx, f, events)
 	}
 	return nil
 }
 
 // removeFirewall takes the key's rules away; one that is not there is no error (the host was cleaned by hand).
-func (c *conn) removeFirewall(ctx context.Context, rules []fwRule, events func(string)) error {
+func (c *conn) removeFirewall(ctx context.Context, f osFacts, rules []fwRule, events func(string)) error {
 	if len(rules) == 0 {
 		return nil
 	}
@@ -143,8 +217,11 @@ func (c *conn) removeFirewall(ctx context.Context, rules []fwRule, events func(s
 			}
 		}
 	}
-	if backend == "firewalld" {
+	switch backend {
+	case "firewalld":
 		_, _ = c.exec(ctx, []string{"firewall-cmd", "--reload"}, nil, nil, events)
+	case "iptables":
+		c.persistAgain(ctx, events)
 	}
 	return nil
 }
