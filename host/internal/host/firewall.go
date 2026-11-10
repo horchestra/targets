@@ -3,37 +3,46 @@ package host
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
 // The firewall of a packages key's hosts: the placement's `firewall` is a list of rules to let through —
-// "<port>", "<port>/<proto>" or "<cidr>:<port>/<proto>" (proto is tcp when none) — kept on whatever firewall the
-// host runs: firewalld when it is active, else an active ufw, else bare iptables. The rules go when the key is
-// removed. firewalld's and ufw's are persistent by themselves; bare iptables gets the OS's own persistence —
-// iptables-persistent (Debian) or iptables-services (RHEL), installed when neither is there.
+// "i:<interface>", "<port>", "<port>/<proto>" or "<cidr>:<port>/<proto>" (proto is tcp when none) — kept on
+// whatever firewall the host runs: firewalld when it is active, else an active ufw, else bare iptables. The rules
+// go when the key is removed. firewalld's and ufw's are persistent by themselves; bare iptables gets the OS's own
+// persistence — iptables-persistent (Debian) or iptables-services (RHEL), installed when neither is there.
 
 // fwRule is one parsed rule of the placement's firewall.
 type fwRule struct {
 	proto string
 	port  string
 	cidr  string // the source the rule is for; "" — anywhere
+	iface string // the input interface; excludes port, proto and cidr
 }
 
 // parseFirewall reads the placement's rules.
 func parseFirewall(list []string) ([]fwRule, error) {
 	var out []fwRule
 	for _, s := range list {
+		if iface, ok := strings.CutPrefix(s, "i:"); ok {
+			if len(iface) == 0 || strings.ContainsAny(iface, ":/") {
+				return nil, fmt.Errorf("%s: an interface rule is i:<interface>", s)
+			}
+			out = append(out, fwRule{iface: iface})
+			continue
+		}
 		r := fwRule{proto: "tcp"}
 		rest := s
 		if cidr, r2, ok := strings.Cut(s, ":"); ok {
 			if strings.Contains(r2, ":") || len(cidr) == 0 {
-				return nil, fmt.Errorf("%s: a rule is <port>[/<proto>] or <cidr>:<port>[/<proto>]", s)
+				return nil, fmt.Errorf("%s: a rule is i:<interface>, <port>[/<proto>] or <cidr>:<port>[/<proto>]", s)
 			}
 			r.cidr, rest = cidr, r2
 		}
 		port, proto, _ := strings.Cut(rest, "/")
 		if len(port) == 0 {
-			return nil, fmt.Errorf("%s: a rule is <port>[/<proto>] or <cidr>:<port>[/<proto>]", s)
+			return nil, fmt.Errorf("%s: a rule is i:<interface>, <port>[/<proto>] or <cidr>:<port>[/<proto>]", s)
 		}
 		r.port = port
 		if len(proto) > 0 {
@@ -62,6 +71,13 @@ func (c *conn) firewallBackend(ctx context.Context) string {
 func firewallCmds(backend string, r fwRule, add bool) [][]string {
 	switch backend {
 	case "firewalld":
+		if len(r.iface) > 0 {
+			action := "--add-rule"
+			if !add {
+				action = "--remove-rule"
+			}
+			return [][]string{{"firewall-cmd", "--permanent", "--direct", action, "ipv4", "filter", "INPUT", "0", "-i", r.iface, "-j", "ACCEPT"}}
+		}
 		arg := "--add-port="
 		if !add {
 			arg = "--remove-port="
@@ -79,6 +95,9 @@ func firewallCmds(backend string, r fwRule, add bool) [][]string {
 		if !add {
 			cmd = append(cmd, "delete")
 		}
+		if len(r.iface) > 0 {
+			return [][]string{append(cmd, "allow", "in", "on", r.iface)}
+		}
 		if len(r.cidr) > 0 {
 			return [][]string{append(cmd, "allow", "from", r.cidr, "to", "any", "port", r.port, "proto", r.proto)}
 		}
@@ -90,7 +109,11 @@ func firewallCmds(backend string, r fwRule, add bool) [][]string {
 		} else {
 			cmd = append(cmd, "-D")
 		}
-		cmd = append(cmd, "INPUT", "-p", r.proto, "--dport", r.port)
+		cmd = append(cmd, "INPUT")
+		if len(r.iface) > 0 {
+			return [][]string{append(cmd, "-i", r.iface, "-j", "ACCEPT")}
+		}
+		cmd = append(cmd, "-p", r.proto, "--dport", r.port)
 		if len(r.cidr) > 0 {
 			cmd = append(cmd, "-s", r.cidr)
 		}
@@ -173,6 +196,47 @@ func (in *Installation) firewallOf(key string) ([]fwRule, error) {
 	return parseFirewall(stringsOf(in.platformFor(key)["firewall"]))
 }
 
+// blanketReject is the number (1-based, as iptables -I takes it) of the INPUT chain's terminal rule — one that
+// rejects or drops whatever reached it, with no condition of its own; 0 — the chain has none, an append is fine.
+// Rules added after such a rule never match, so pack's go before it.
+func blanketReject(out []byte) int {
+	n := 0
+	for l := range strings.Lines(string(out)) {
+		f := strings.Fields(l)
+		if len(f) < 3 || f[0] != "-A" || f[1] != "INPUT" {
+			continue
+		}
+		n++
+		if f[2] == "-j" && len(f) >= 4 && (f[3] == "REJECT" || f[3] == "DROP") &&
+			(len(f) == 4 || len(f) == 6 && f[4] == "--reject-with") {
+			return n
+		}
+	}
+	return 0
+}
+
+// iptablesAdd adds the rule (the tail, INPUT … -j ACCEPT) where it takes effect: before the chain's terminal
+// REJECT/DROP, appended when it has none.
+func (c *conn) iptablesAdd(ctx context.Context, tail []string, events func(string)) error {
+	check := append([]string{"iptables", "-C"}, tail...)
+	if _, err := c.exec(ctx, check, nil, nil, nil); err == nil {
+		return nil // the rule is there already
+	}
+	out, err := c.exec(ctx, []string{"iptables", "-S", "INPUT"}, nil, nil, nil)
+	if err != nil {
+		return err
+	}
+	cmd := []string{"iptables", "-A"}
+	if pos := blanketReject(out); pos > 0 {
+		cmd = []string{"iptables", "-I", "INPUT", strconv.Itoa(pos)}
+		tail = tail[1:] // the -I already names the chain
+	}
+	if _, err := c.exec(ctx, append(cmd, tail...), nil, nil, events); err != nil {
+		return fmt.Errorf("firewall %s: %w", strings.Join(tail, " "), err)
+	}
+	return nil
+}
+
 // applyFirewall lets the key's rules through on its host. iptables: -C says whether the rule is there already,
 // and the table is persisted once the rules are in.
 func (c *conn) applyFirewall(ctx context.Context, f osFacts, rules []fwRule, events func(string)) error {
@@ -183,10 +247,10 @@ func (c *conn) applyFirewall(ctx context.Context, f osFacts, rules []fwRule, eve
 	for _, r := range rules {
 		for _, cmd := range firewallCmds(backend, r, true) {
 			if backend == "iptables" {
-				check := append([]string{"iptables", "-C"}, cmd[2:]...)
-				if _, err := c.exec(ctx, check, nil, nil, nil); err == nil {
-					continue
+				if err := c.iptablesAdd(ctx, cmd[2:], events); err != nil {
+					return err
 				}
+				continue
 			}
 			if _, err := c.exec(ctx, cmd, nil, nil, events); err != nil {
 				return fmt.Errorf("firewall %s: %w", r.port, err)

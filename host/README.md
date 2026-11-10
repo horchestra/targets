@@ -52,7 +52,7 @@ Of a key's entry under `keys:` (the placement) the target reads:
 | `hosts`                   | the hosts it runs on (all of them when none) | instance *i* on the *i*-th |
 | `packages`                | the package names — a list, or a map by OS (`debian-12`, `debian`, `rhel`) that adds an OS the pack does not know | — |
 | `services`                | the systemd units to start and enable | — |
-| `firewall`                | the rules to let through — `<port>[/<proto>]` or `<cidr>:<port>[/<proto>]`, tcp when no proto; on firewalld, ufw or bare iptables, whatever the host runs | — |
+| `firewall`                | the rules to let through — `i:<iface>`, `<port>[/<proto>]` or `<cidr>:<port>[/<proto>]`, tcp when no proto; on firewalld, ufw or bare iptables, whatever the host runs | — |
 | `publish`                 | — | the ports published on the host, on this machine alone (across hosts every port is published as itself) |
 | `name`, `hostname`, `aliases`, `ip`, `dns`, `user`, `groupAdd`, `sysctls`, `securityOpt`, `mounts`, `restart` | — | the container's runtime, the words of a compose file |
 

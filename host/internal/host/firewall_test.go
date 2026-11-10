@@ -50,3 +50,28 @@ func TestFirewallCmds(t *testing.T) {
 		}
 	}
 }
+
+func TestBlanketReject(t *testing.T) {
+	awg := `# iptables-save of a host with a terminal REJECT
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [510252936:526098872997]
+:OUTPUT ACCEPT [600763800:578558339489]
+-A INPUT -i lo -j ACCEPT
+-A INPUT -d 127.0.0.0/8 ! -i lo -j REJECT --reject-with icmp-port-unreachable
+-A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -i awg0 -j ACCEPT
+-A INPUT -p icmp -j ACCEPT
+-A INPUT -j REJECT --reject-with icmp-port-unreachable
+COMMIT
+`
+	if pos := blanketReject([]byte(awg)); pos != 6 {
+		t.Errorf("pos = %d, want 6 (the scoped rejects are not terminal)", pos)
+	}
+	if pos := blanketReject([]byte("*filter\n:INPUT ACCEPT [0:0]\n-A INPUT -p tcp -j ACCEPT\nCOMMIT\n")); pos != 0 {
+		t.Errorf("pos = %d, want 0 (no terminal rule)", pos)
+	}
+	if pos := blanketReject([]byte("*filter\n:INPUT DROP [0:0]\n-A INPUT -j DROP\nCOMMIT\n")); pos != 1 {
+		t.Errorf("pos = %d, want 1", pos)
+	}
+}
