@@ -103,6 +103,15 @@ func TestResolvePackaged(t *testing.T) {
 	}
 }
 
+func TestOSFactsResolve(t *testing.T) {
+	facts := osFacts{id: "debian", version: "13", codename: "trixie", arch: "amd64", kernel: "6.12.38-amd64"}
+	got := facts.resolve("${os:id}-${os:version}/${os:codename}/${os:arch}/linux-headers-${os:kernel}")
+	want := "debian-13/trixie/amd64/linux-headers-6.12.38-amd64"
+	if got != want {
+		t.Errorf("resolve = %q, want %q", got, want)
+	}
+}
+
 func TestSubstitute(t *testing.T) {
 	resolve := func(ref string) (string, error) {
 		if ref == "ca/cert" {

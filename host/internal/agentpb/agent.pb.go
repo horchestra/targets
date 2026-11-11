@@ -75,6 +75,7 @@ type InfoResponse struct {
 	Codename      string                 `protobuf:"bytes,3,opt,name=codename,proto3" json:"codename,omitempty"` // VERSION_CODENAME
 	Family        string                 `protobuf:"bytes,4,opt,name=family,proto3" json:"family,omitempty"`     // debian or rhel, of ID_LIKE and ID
 	Arch          string                 `protobuf:"bytes,5,opt,name=arch,proto3" json:"arch,omitempty"`         // GOARCH of the agent: amd64, arm64
+	Kernel        string                 `protobuf:"bytes,6,opt,name=kernel,proto3" json:"kernel,omitempty"`     // release of the running kernel, from uname -r
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -140,6 +141,13 @@ func (x *InfoResponse) GetFamily() string {
 func (x *InfoResponse) GetArch() string {
 	if x != nil {
 		return x.Arch
+	}
+	return ""
+}
+
+func (x *InfoResponse) GetKernel() string {
+	if x != nil {
+		return x.Kernel
 	}
 	return ""
 }
@@ -749,13 +757,14 @@ var File_agent_proto protoreflect.FileDescriptor
 const file_agent_proto_rawDesc = "" +
 	"\n" +
 	"\vagent.proto\x12\rpack.agent.v1\"\r\n" +
-	"\vInfoRequest\"\x80\x01\n" +
+	"\vInfoRequest\"\x98\x01\n" +
 	"\fInfoResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1a\n" +
 	"\bcodename\x18\x03 \x01(\tR\bcodename\x12\x16\n" +
 	"\x06family\x18\x04 \x01(\tR\x06family\x12\x12\n" +
-	"\x04arch\x18\x05 \x01(\tR\x04arch\"I\n" +
+	"\x04arch\x18\x05 \x01(\tR\x04arch\x12\x16\n" +
+	"\x06kernel\x18\x06 \x01(\tR\x06kernel\"I\n" +
 	"\vExecRequest\x12\x12\n" +
 	"\x04argv\x18\x01 \x03(\tR\x04argv\x12\x10\n" +
 	"\x03env\x18\x02 \x03(\tR\x03env\x12\x14\n" +

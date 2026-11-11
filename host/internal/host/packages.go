@@ -18,16 +18,22 @@ import (
 
 // osFacts is what a host says of its OS: the agent's Info in the shape the packages' choice is made by.
 type osFacts struct {
-	id, version, family, codename, arch string
+	id, version, family, codename, arch, kernel string
 }
 
 func factsOf(info *agentpb.InfoResponse) osFacts {
-	return osFacts{id: info.Id, version: info.Version, family: info.Family, codename: info.Codename, arch: info.Arch}
+	return osFacts{id: info.Id, version: info.Version, family: info.Family, codename: info.Codename, arch: info.Arch, kernel: info.Kernel}
 }
 
 // resolve puts the host's facts in place of ${os:…}.
 func (f osFacts) resolve(s string) string {
-	return strings.NewReplacer("${os:codename}", f.codename, "${os:version}", f.version, "${os:arch}", f.arch, "${os:id}", f.id).Replace(s)
+	return strings.NewReplacer(
+		"${os:codename}", f.codename,
+		"${os:version}", f.version,
+		"${os:arch}", f.arch,
+		"${os:id}", f.id,
+		"${os:kernel}", f.kernel,
+	).Replace(s)
 }
 
 // candidates are the names a host goes by, the most exact first.

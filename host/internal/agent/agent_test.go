@@ -65,6 +65,9 @@ func TestInfo(t *testing.T) {
 	if info.Arch != runtime.GOARCH {
 		t.Errorf("arch = %q, want %q", info.Arch, runtime.GOARCH)
 	}
+	if len(info.Kernel) == 0 {
+		t.Error("the agent said no running kernel")
+	}
 	if _, err := os.Stat("/etc/os-release"); err == nil && len(info.Id) == 0 {
 		t.Error("os-release is there, but the agent said no ID")
 	}

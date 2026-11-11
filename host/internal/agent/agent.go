@@ -70,15 +70,20 @@ func checkToken(ctx context.Context, token string) error {
 	return status.Error(codes.Unauthenticated, "a call carries no pack-agent-token, or a wrong one")
 }
 
-// Info is the host's OS (of /etc/os-release) and the agent's architecture.
+// Info is the host's OS (of /etc/os-release), running kernel and the agent's architecture.
 func (s *Server) Info(_ context.Context, _ *agentpb.InfoRequest) (*agentpb.InfoResponse, error) {
 	osr := readOSRelease()
+	kernel, err := exec.Command("uname", "-r").Output()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "uname -r: %v", err)
+	}
 	return &agentpb.InfoResponse{
 		Id:       osr["ID"],
 		Version:  major(osr["VERSION_ID"]),
 		Codename: osr["VERSION_CODENAME"],
 		Family:   family(osr),
 		Arch:     runtime.GOARCH,
+		Kernel:   strings.TrimSpace(string(kernel)),
 	}, nil
 }
 

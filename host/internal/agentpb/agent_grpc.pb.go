@@ -43,8 +43,8 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AgentClient interface {
-	// Info is the host's identity: its OS (of /etc/os-release) and architecture — what packages are chosen by,
-	// and whether the agent the driver brought matches the host.
+	// Info is the host's identity: its OS (of /etc/os-release), running kernel and architecture — what packages are
+	// chosen by, and whether the agent the driver brought matches the host.
 	Info(ctx context.Context, in *InfoRequest, opts ...grpc.CallOption) (*InfoResponse, error)
 	// Exec runs argv with the given environment added and stdin fed to it, streaming the output's lines back,
 	// stdout and stderr as they come. The last event carries the exit code; a non-zero one is not an error of the
@@ -158,8 +158,8 @@ func (c *agentClient) ProxyStop(ctx context.Context, in *ProxyStopRequest, opts 
 // All implementations must embed UnimplementedAgentServer
 // for forward compatibility.
 type AgentServer interface {
-	// Info is the host's identity: its OS (of /etc/os-release) and architecture — what packages are chosen by,
-	// and whether the agent the driver brought matches the host.
+	// Info is the host's identity: its OS (of /etc/os-release), running kernel and architecture — what packages are
+	// chosen by, and whether the agent the driver brought matches the host.
 	Info(context.Context, *InfoRequest) (*InfoResponse, error)
 	// Exec runs argv with the given environment added and stdin fed to it, streaming the output's lines back,
 	// stdout and stderr as they come. The last event carries the exit code; a non-zero one is not an error of the

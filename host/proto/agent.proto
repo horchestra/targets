@@ -15,8 +15,8 @@ package pack.agent.v1;
 option go_package = "github.com/horchestra/targets/host/internal/agentpb;agentpb";
 
 service Agent {
-  // Info is the host's identity: its OS (of /etc/os-release) and architecture — what packages are chosen by,
-  // and whether the agent the driver brought matches the host.
+  // Info is the host's identity: its OS (of /etc/os-release), running kernel and architecture — what packages are
+  // chosen by, and whether the agent the driver brought matches the host.
   rpc Info(InfoRequest) returns (InfoResponse);
   // Exec runs argv with the given environment added and stdin fed to it, streaming the output's lines back,
   // stdout and stderr as they come. The last event carries the exit code; a non-zero one is not an error of the
@@ -47,6 +47,7 @@ message InfoResponse {
   string codename = 3; // VERSION_CODENAME
   string family = 4;   // debian or rhel, of ID_LIKE and ID
   string arch = 5;     // GOARCH of the agent: amd64, arm64
+  string kernel = 6;   // release of the running kernel, from uname -r
 }
 
 message ExecRequest {

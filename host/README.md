@@ -82,7 +82,7 @@ The pack is told where to look by a value of its own (`mirror`, `release_url`):
 `proto/agent.proto` (`pack.agent.v1`), regenerated with `buf generate proto`:
 
 ```
-Info() → os id, version, codename, family (debian | rhel), arch
+Info() → os id, version, codename, family (debian | rhel), arch, kernel (uname -r)
 Exec(argv, env, stdin) → stream of the output's lines; the last event the exit code
 WriteFile(path, content, mode) → changed      RemoveFile(path) → removed
 ProxyStart(registry, plain_http, credentials, port)      ProxyStop()
