@@ -52,16 +52,21 @@ func (p *artifactProxy) stop() {
 	_ = p.srv.Shutdown(ctx)
 }
 
-// Convert reads /<repo>:<tag>/<file>: the first colon ends the repository, the first slash after it the tag, the
-// rest is the file as the artifact names it (dists/trixie/InRelease).
+// Convert reads /<repo>:<tag>/<file> and /<repo>@<digest>/<file>: "@" or the first colon ends the repository,
+// the first slash after it the tag or digest, the rest is the file as the artifact names it
+// (dists/trixie/InRelease). A file name with "@" is not served.
 func Convert(r *http.Request) (reference.Reference, map[string]string, error) {
-	repo, rest, ok := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), ":")
+	p := strings.TrimPrefix(r.URL.Path, "/")
+	repo, rest, ok := strings.Cut(p, ":")
+	if i := strings.Index(p, "@"); i >= 0 && !strings.Contains(p[:i], ":") {
+		repo, rest, ok = p[:i], p[i+1:], true
+	}
 	if !ok || len(repo) == 0 {
-		return reference.Reference{}, nil, fmt.Errorf("%s: a path is /<repo>:<tag>/<file>", r.URL.Path)
+		return reference.Reference{}, nil, fmt.Errorf("%s: a path is /<repo>:<tag>/<file> or /<repo>@<digest>/<file>", r.URL.Path)
 	}
 	tag, file, ok := strings.Cut(rest, "/")
 	if !ok || len(tag) == 0 || len(file) == 0 {
-		return reference.Reference{}, nil, fmt.Errorf("%s: a path is /<repo>:<tag>/<file>", r.URL.Path)
+		return reference.Reference{}, nil, fmt.Errorf("%s: a path is /<repo>:<tag>/<file> or /<repo>@<digest>/<file>", r.URL.Path)
 	}
 	opts := map[string]string{ocispecv1.AnnotationTitle: file}
 	if platform := r.URL.Query().Get("platform"); len(platform) > 0 {

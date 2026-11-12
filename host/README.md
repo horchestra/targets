@@ -77,6 +77,12 @@ the internet.
 The pack is told where to look by a value of its own (`mirror`, `release_url`):
 `mirror: http://127.0.0.1:8081/mirrors/docker-debian:29`.
 
+The same proxy serves the files of the packs themselves. A pack that came from a registry names every file it
+ships byte for byte (`Source`) by its reference, and pack sends the target no bytes of it: the agent downloads
+`http://127.0.0.1:8081/<repo>@<digest>/templates/<file>` straight from the registry, on the host. A pack read
+from a directory has no such place, and its files cross as before. Without `mirror_registry` a registry pack's
+files cannot be fetched: the apply says so.
+
 ## The agent's protocol
 
 `proto/agent.proto` (`pack.agent.v1`), regenerated with `buf generate proto`:

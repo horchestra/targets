@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/arenadata/oci-packer/pkg/registry/reference"
+
 	"github.com/horchestra/pack/pkg/render"
 	"github.com/horchestra/pack/pkg/secretstore"
 	"github.com/horchestra/pack/pkg/target"
@@ -511,4 +513,41 @@ func (in *Installation) withMirror(ctx context.Context, c *conn, install func() 
 	}
 	defer c.proxyStop(context.WithoutCancel(ctx))
 	return install()
+}
+
+// ociFetchURL rewrites a file's oci:// URL — the pack's reference, /templates/<name> after it — into the URL of
+// the mirror's proxy on the host's loopback; any other URL is the author's and goes as it is.
+func (in *Installation) ociFetchURL(url string) (string, error) {
+	if !strings.HasPrefix(url, "oci://") {
+		return url, nil
+	}
+	if in.mirror == nil {
+		return "", fmt.Errorf("%s: a file of a pack in a registry, but mirror_registry is not set", url)
+	}
+	parsed, file, err := splitOCIRef(url)
+	if err != nil {
+		return "", err
+	}
+	sep := ":"
+	if strings.Contains(parsed.Ref, ":") { // a digest: sha256:…
+		sep = "@"
+	}
+	path := parsed.Path
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return fmt.Sprintf("http://127.0.0.1:%s%s%s%s/%s", in.mirror.port, path, sep, parsed.Ref, file), nil
+}
+
+// splitOCIRef cuts oci://<reference>/<file> into the two: the reference is the longest prefix that parses with a
+// tag or a digest (neither holds a slash, so the file's start is found exactly).
+func splitOCIRef(url string) (reference.Reference, string, error) {
+	parts := strings.Split(strings.TrimPrefix(url, "oci://"), "/")
+	for i := len(parts) - 1; i >= 1; i-- {
+		parsed, err := reference.Parse("oci://" + strings.Join(parts[:i], "/"))
+		if err == nil && len(parsed.Ref) > 0 {
+			return parsed, strings.Join(parts[i:], "/"), nil
+		}
+	}
+	return reference.Reference{}, "", fmt.Errorf("%s: no reference the file follows", url)
 }

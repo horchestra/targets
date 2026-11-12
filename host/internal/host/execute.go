@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/horchestra/pack/pkg/render"
@@ -141,7 +142,13 @@ func (in *Installation) apply(ctx context.Context, u render.Unit, creds []render
 			}
 			continue
 		}
-		if err := in.applyFiles(ctx, cn, u, i, resolve, events); err != nil {
+		applyFiles := func() error { return in.applyFiles(ctx, cn, u, i, resolve, events) }
+		if slices.ContainsFunc(u.Files, func(f render.File) bool { return len(f.URL) > 0 }) {
+			err = in.withMirror(ctx, cn, applyFiles)
+		} else {
+			err = applyFiles()
+		}
+		if err != nil {
 			return fmt.Errorf("%s: %s: %w", u.Key, cn.h.name, err)
 		}
 	}

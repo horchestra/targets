@@ -159,20 +159,25 @@ func (c *conn) deliverURL(ctx context.Context, f osFacts, path, url string, mode
 	return c.fetch(ctx, f.resolve(url), path, mode)
 }
 
-// deliver puts a file on the host and says whether that changed it: its bytes, or a download.
-func (c *conn) deliver(ctx context.Context, f osFacts, file render.File, resolve func(string) (string, error), events func(string)) (bool, error) {
+// deliver puts a file on the host and says whether that changed it: its bytes, or a download. A file of a pack in
+// a registry comes from the mirror's proxy on the host's loopback.
+func (in *Installation) deliver(ctx context.Context, cn *conn, f osFacts, file render.File, resolve func(string) (string, error), events func(string)) (bool, error) {
 	var mode uint32 = 0o644
 	if file.Mode != nil {
 		mode = uint32(file.Mode.Perm())
 	}
 	if len(file.URL) > 0 {
-		return c.deliverURL(ctx, f, file.Path, file.URL, mode)
+		url, err := in.ociFetchURL(file.URL)
+		if err != nil {
+			return false, fmt.Errorf("%s: %w", file.Path, err)
+		}
+		return cn.deliverURL(ctx, f, file.Path, url, mode)
 	}
 	s, err := substitute(string(file.Content), resolve)
 	if err != nil {
 		return false, err
 	}
-	return c.writeFile(ctx, file.Path, []byte(f.resolve(s)), mode)
+	return cn.writeFile(ctx, file.Path, []byte(f.resolve(s)), mode)
 }
 
 // applyPackages brings one host to its OS's entry, in the order packschema.OSInstall says. A unit is restarted
@@ -188,7 +193,7 @@ func (in *Installation) applyPackages(ctx context.Context, cn *conn, u render.Un
 	}
 	repoChanged := false
 	for _, file := range p.Repo {
-		ch, err := cn.deliver(ctx, f, file, resolve, events)
+		ch, err := in.deliver(ctx, cn, f, file, resolve, events)
 		if err != nil {
 			return fmt.Errorf("%s: %w", file.Path, err)
 		}
@@ -209,7 +214,7 @@ func (in *Installation) applyPackages(ctx context.Context, cn *conn, u render.Un
 	}
 	changed := false
 	for _, file := range p.Files {
-		ch, err := cn.deliver(ctx, f, file, resolve, events)
+		ch, err := in.deliver(ctx, cn, f, file, resolve, events)
 		if err != nil {
 			return fmt.Errorf("%s: %w", file.Path, err)
 		}
@@ -313,6 +318,22 @@ func (in *Installation) applyFiles(ctx context.Context, cn *conn, u render.Unit,
 	}
 	changed := false
 	for _, file := range u.Files {
+		if len(file.URL) > 0 { // a pack in a registry: the agent downloads it, the mirror's proxy serves it
+			var mode uint32
+			if file.Mode != nil {
+				mode = uint32(file.Mode.Perm())
+			}
+			url, err := in.ociFetchURL(file.URL)
+			if err != nil {
+				return fmt.Errorf("%s: %w", file.Path, err)
+			}
+			ch, err := cn.deliverURL(ctx, f, file.Path, url, mode)
+			if err != nil {
+				return fmt.Errorf("%s: %w", file.Path, err)
+			}
+			changed = changed || ch
+			continue
+		}
 		data := file.Content
 		if file.PerInstance() {
 			if instance >= len(file.Instances) || file.Instances[instance] == nil {
