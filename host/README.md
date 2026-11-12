@@ -57,7 +57,10 @@ Of a key's entry under `keys:` (the placement) the target reads:
 | `name`, `hostname`, `aliases`, `ip`, `dns`, `user`, `groupAdd`, `sysctls`, `securityOpt`, `mounts`, `restart` | — | the container's runtime, the words of a compose file |
 
 A key is a **packages key** when its placement has `packages` or `services`, else a containers key; the two sets
-of properties do not mix.
+of properties do not mix. A package the host already has — at the version a `name=version` pin says — is not
+installed again, and `apt-get update` runs only when a delivered repository file changed; a repeat apply that
+changes nothing runs no package manager at all. Repository keys are keyring files a pack's `repo` delivers
+(`/etc/apt/keyrings/<name>.asc` named by `Signed-By:`), never `apt-key` — it is gone past Debian 12.
 
 ## Packages from a registry
 

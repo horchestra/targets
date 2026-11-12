@@ -113,7 +113,9 @@ func packagesOf(v any) (all []string, byOS map[string][]string) {
 var aptEnv = []string{"DEBIAN_FRONTEND=noninteractive", "APT_LISTCHANGES_FRONTEND=none"}
 
 // installNames installs the packages on the host: apt on debian, dnf on rhel. A name with :// is a package file
-// the agent fetches first (the mirror serves it over the loopback).
+// the agent fetches first (the mirror serves it over the loopback). A package the host already has — at the
+// version a `name=version` pin says — is not asked of the package manager again: apt would upgrade a present name
+// to the repository's newest, a change no plan showed.
 func (c *conn) installNames(ctx context.Context, f osFacts, names []string, events func(string)) error {
 	var plain []string
 	for _, n := range names {
@@ -135,6 +137,9 @@ func (c *conn) installNames(ctx context.Context, f osFacts, names []string, even
 			_, _ = c.exec(ctx, []string{"rm", "-f", "/tmp/pack-package"}, nil, nil, nil)
 			continue
 		}
+		if c.hasPackage(ctx, f, n) {
+			continue
+		}
 		plain = append(plain, n)
 	}
 	if len(plain) == 0 {
@@ -149,6 +154,25 @@ func (c *conn) installNames(ctx context.Context, f osFacts, names []string, even
 		return err
 	}
 	return fmt.Errorf("%sthe OS family %q is not known (debian, rhel)", c.h.prefix(), f.family)
+}
+
+// hasPackage says whether the host has the package installed: the name, at the version a `name=version` pin says.
+// A name that is not the package manager's (an unresolvable one) counts as absent: the install that follows says why.
+func (c *conn) hasPackage(ctx context.Context, f osFacts, name string) bool {
+	switch f.family {
+	case "debian":
+		base, pin, pinned := strings.Cut(name, "=")
+		out, err := c.exec(ctx, []string{"dpkg-query", "-W", "-f=${db:Status-Abbrev} ${Version}", base}, nil, nil, nil)
+		if err != nil {
+			return false
+		}
+		status, v, _ := strings.Cut(strings.TrimSpace(string(out)), " ")
+		return status == "ii" && (!pinned || v == pin)
+	case "rhel":
+		_, err := c.exec(ctx, []string{"rpm", "-q", name}, nil, nil, nil)
+		return err == nil
+	}
+	return false
 }
 
 // deliverURL puts a URL's content at the path and says whether that changed it: the agent's own download.
