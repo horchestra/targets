@@ -33,6 +33,7 @@ const (
 	Agent_Info_FullMethodName       = "/pack.agent.v1.Agent/Info"
 	Agent_Exec_FullMethodName       = "/pack.agent.v1.Agent/Exec"
 	Agent_WriteFile_FullMethodName  = "/pack.agent.v1.Agent/WriteFile"
+	Agent_PutFile_FullMethodName    = "/pack.agent.v1.Agent/PutFile"
 	Agent_RemoveFile_FullMethodName = "/pack.agent.v1.Agent/RemoveFile"
 	Agent_Fetch_FullMethodName      = "/pack.agent.v1.Agent/Fetch"
 	Agent_ProxyStart_FullMethodName = "/pack.agent.v1.Agent/ProxyStart"
@@ -53,6 +54,10 @@ type AgentClient interface {
 	// WriteFile writes content to path with the mode (0644 when none), making the path's directory first. It says
 	// whether anything changed: a file that was already exactly this is left alone.
 	WriteFile(ctx context.Context, in *WriteFileRequest, opts ...grpc.CallOption) (*WriteFileResponse, error)
+	// PutFile streams a file of the driver's machine to the path — a pack's Source file read from the disk as it
+	// goes, never held whole on either side. The first message carries the path and the mode, every message a
+	// chunk. It says whether anything changed: a file that was already exactly this is left alone.
+	PutFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[PutFileRequest, PutFileResponse], error)
 	// RemoveFile deletes path; one that is not there is no error.
 	RemoveFile(ctx context.Context, in *RemoveFileRequest, opts ...grpc.CallOption) (*RemoveFileResponse, error)
 	// Fetch downloads url to path with the mode (0644 when none), with the agent's own HTTP client — no curl or
@@ -114,6 +119,19 @@ func (c *agentClient) WriteFile(ctx context.Context, in *WriteFileRequest, opts 
 	return out, nil
 }
 
+func (c *agentClient) PutFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[PutFileRequest, PutFileResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Agent_ServiceDesc.Streams[1], Agent_PutFile_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[PutFileRequest, PutFileResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Agent_PutFileClient = grpc.ClientStreamingClient[PutFileRequest, PutFileResponse]
+
 func (c *agentClient) RemoveFile(ctx context.Context, in *RemoveFileRequest, opts ...grpc.CallOption) (*RemoveFileResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RemoveFileResponse)
@@ -168,6 +186,10 @@ type AgentServer interface {
 	// WriteFile writes content to path with the mode (0644 when none), making the path's directory first. It says
 	// whether anything changed: a file that was already exactly this is left alone.
 	WriteFile(context.Context, *WriteFileRequest) (*WriteFileResponse, error)
+	// PutFile streams a file of the driver's machine to the path — a pack's Source file read from the disk as it
+	// goes, never held whole on either side. The first message carries the path and the mode, every message a
+	// chunk. It says whether anything changed: a file that was already exactly this is left alone.
+	PutFile(grpc.ClientStreamingServer[PutFileRequest, PutFileResponse]) error
 	// RemoveFile deletes path; one that is not there is no error.
 	RemoveFile(context.Context, *RemoveFileRequest) (*RemoveFileResponse, error)
 	// Fetch downloads url to path with the mode (0644 when none), with the agent's own HTTP client — no curl or
@@ -198,6 +220,9 @@ func (UnimplementedAgentServer) Exec(*ExecRequest, grpc.ServerStreamingServer[Ex
 }
 func (UnimplementedAgentServer) WriteFile(context.Context, *WriteFileRequest) (*WriteFileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WriteFile not implemented")
+}
+func (UnimplementedAgentServer) PutFile(grpc.ClientStreamingServer[PutFileRequest, PutFileResponse]) error {
+	return status.Error(codes.Unimplemented, "method PutFile not implemented")
 }
 func (UnimplementedAgentServer) RemoveFile(context.Context, *RemoveFileRequest) (*RemoveFileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RemoveFile not implemented")
@@ -278,6 +303,13 @@ func _Agent_WriteFile_Handler(srv interface{}, ctx context.Context, dec func(int
 	}
 	return interceptor(ctx, in, info, handler)
 }
+
+func _Agent_PutFile_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(AgentServer).PutFile(&grpc.GenericServerStream[PutFileRequest, PutFileResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Agent_PutFileServer = grpc.ClientStreamingServer[PutFileRequest, PutFileResponse]
 
 func _Agent_RemoveFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RemoveFileRequest)
@@ -388,6 +420,11 @@ var Agent_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "Exec",
 			Handler:       _Agent_Exec_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "PutFile",
+			Handler:       _Agent_PutFile_Handler,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "agent.proto",

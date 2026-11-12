@@ -25,6 +25,10 @@ service Agent {
   // WriteFile writes content to path with the mode (0644 when none), making the path's directory first. It says
   // whether anything changed: a file that was already exactly this is left alone.
   rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
+  // PutFile streams a file of the driver's machine to the path — a pack's Source file read from the disk as it
+  // goes, never held whole on either side. The first message carries the path and the mode, every message a
+  // chunk. It says whether anything changed: a file that was already exactly this is left alone.
+  rpc PutFile(stream PutFileRequest) returns (PutFileResponse);
   // RemoveFile deletes path; one that is not there is no error.
   rpc RemoveFile(RemoveFileRequest) returns (RemoveFileResponse);
   // Fetch downloads url to path with the mode (0644 when none), with the agent's own HTTP client — no curl or
@@ -69,6 +73,16 @@ message WriteFileRequest {
 }
 
 message WriteFileResponse {
+  bool changed = 1; // the file or its mode changed
+}
+
+message PutFileRequest {
+  string path = 1;   // set in the first message
+  uint32 mode = 2;   // the permission bits; 0 — 0644
+  bytes chunk = 3;   // the file's bytes, in order
+}
+
+message PutFileResponse {
   bool changed = 1; // the file or its mode changed
 }
 

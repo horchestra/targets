@@ -441,6 +441,47 @@ func (c *conn) writeFile(ctx context.Context, path string, content []byte, mode 
 	return res.Changed, nil
 }
 
+// putFile streams a file of this machine — a pack's Source file read from the disk as it goes — to the path on
+// the host and says whether that changed it.
+func (c *conn) putFile(ctx context.Context, local, path string, mode uint32) (bool, error) {
+	f, err := os.Open(local)
+	if err != nil {
+		return false, fmt.Errorf("%s%s: %w", c.h.prefix(), local, err)
+	}
+	defer func() { _ = f.Close() }()
+	s, err := c.client(ctx)
+	if err != nil {
+		return false, err
+	}
+	stream, err := s.cli.PutFile(ctx)
+	if err != nil {
+		return false, fmt.Errorf("%s%s: %w", c.h.prefix(), path, err)
+	}
+	req := &agentpb.PutFileRequest{Path: path, Mode: mode}
+	buf := make([]byte, 1<<20)
+	for {
+		n, rerr := f.Read(buf)
+		req.Chunk = buf[:n]
+		if n > 0 || req.Path != "" {
+			if err := stream.Send(req); err != nil {
+				return false, fmt.Errorf("%s%s: %w", c.h.prefix(), path, err)
+			}
+			req = &agentpb.PutFileRequest{}
+		}
+		if errors.Is(rerr, io.EOF) {
+			break
+		}
+		if rerr != nil {
+			return false, fmt.Errorf("%s%s: %w", c.h.prefix(), local, rerr)
+		}
+	}
+	res, err := stream.CloseAndRecv()
+	if err != nil {
+		return false, fmt.Errorf("%s%s: %w", c.h.prefix(), path, err)
+	}
+	return res.Changed, nil
+}
+
 // removeFile deletes the path on the host.
 func (c *conn) removeFile(ctx context.Context, path string) error {
 	s, err := c.client(ctx)

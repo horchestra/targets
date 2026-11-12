@@ -80,8 +80,9 @@ The pack is told where to look by a value of its own (`mirror`, `release_url`):
 The same proxy serves the files of the packs themselves. A pack that came from a registry names every file it
 ships byte for byte (`Source`) by its reference, and pack sends the target no bytes of it: the agent downloads
 `http://127.0.0.1:8081/<repo>@<digest>/templates/<file>` straight from the registry, on the host. A pack read
-from a directory has no such place, and its files cross as before. Without `mirror_registry` a registry pack's
-files cannot be fetched: the apply says so.
+from a directory names its files `file://<dir>/templates/<file>` — the driver streams them from its own disk to
+the agent (`PutFile`), never held whole on either side and never crossing pack's channel to the target. Without
+`mirror_registry` a registry pack's files cannot be fetched: the apply says so.
 
 ## The agent's protocol
 
@@ -91,6 +92,7 @@ files cannot be fetched: the apply says so.
 Info() → os id, version, codename, family (debian | rhel), arch, kernel (uname -r)
 Exec(argv, env, stdin) → stream of the output's lines; the last event the exit code
 WriteFile(path, content, mode) → changed      RemoveFile(path) → removed
+PutFile(stream path, mode, chunks) → changed  Fetch(url, path, mode) → changed
 ProxyStart(registry, plain_http, credentials, port)      ProxyStop()
 ```
 

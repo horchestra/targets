@@ -159,6 +159,20 @@ func (c *conn) deliverURL(ctx context.Context, f osFacts, path, url string, mode
 	return c.fetch(ctx, f.resolve(url), path, mode)
 }
 
+// deliverFetched puts a URL's file on the host and says whether that changed it: a file:// one is streamed from
+// this machine's disk, any other the agent downloads — a file of a pack in a registry from the mirror's proxy on
+// the host's loopback.
+func (in *Installation) deliverFetched(ctx context.Context, cn *conn, f osFacts, path, url string, mode uint32) (bool, error) {
+	if local, ok := strings.CutPrefix(url, "file://"); ok {
+		return cn.putFile(ctx, local, path, mode)
+	}
+	u, err := in.ociFetchURL(url)
+	if err != nil {
+		return false, err
+	}
+	return cn.deliverURL(ctx, f, path, u, mode)
+}
+
 // deliver puts a file on the host and says whether that changed it: its bytes, or a download. A file of a pack in
 // a registry comes from the mirror's proxy on the host's loopback.
 func (in *Installation) deliver(ctx context.Context, cn *conn, f osFacts, file render.File, resolve func(string) (string, error), events func(string)) (bool, error) {
@@ -167,11 +181,11 @@ func (in *Installation) deliver(ctx context.Context, cn *conn, f osFacts, file r
 		mode = uint32(file.Mode.Perm())
 	}
 	if len(file.URL) > 0 {
-		url, err := in.ociFetchURL(file.URL)
+		ch, err := in.deliverFetched(ctx, cn, f, file.Path, file.URL, mode)
 		if err != nil {
 			return false, fmt.Errorf("%s: %w", file.Path, err)
 		}
-		return cn.deliverURL(ctx, f, file.Path, url, mode)
+		return ch, nil
 	}
 	s, err := substitute(string(file.Content), resolve)
 	if err != nil {
@@ -318,16 +332,12 @@ func (in *Installation) applyFiles(ctx context.Context, cn *conn, u render.Unit,
 	}
 	changed := false
 	for _, file := range u.Files {
-		if len(file.URL) > 0 { // a pack in a registry: the agent downloads it, the mirror's proxy serves it
+		if len(file.URL) > 0 { // fetched: the agent downloads it, or it is streamed from this machine's disk
 			var mode uint32
 			if file.Mode != nil {
 				mode = uint32(file.Mode.Perm())
 			}
-			url, err := in.ociFetchURL(file.URL)
-			if err != nil {
-				return fmt.Errorf("%s: %w", file.Path, err)
-			}
-			ch, err := cn.deliverURL(ctx, f, file.Path, url, mode)
+			ch, err := in.deliverFetched(ctx, cn, f, file.Path, file.URL, mode)
 			if err != nil {
 				return fmt.Errorf("%s: %w", file.Path, err)
 			}

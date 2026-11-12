@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/horchestra/pack/pkg/render"
@@ -143,7 +144,9 @@ func (in *Installation) apply(ctx context.Context, u render.Unit, creds []render
 			continue
 		}
 		applyFiles := func() error { return in.applyFiles(ctx, cn, u, i, resolve, events) }
-		if slices.ContainsFunc(u.Files, func(f render.File) bool { return len(f.URL) > 0 }) {
+		if slices.ContainsFunc(u.Files, func(f render.File) bool { // a file:// one is streamed, the proxy serves it not
+			return len(f.URL) > 0 && !strings.HasPrefix(f.URL, "file://")
+		}) {
 			err = in.withMirror(ctx, cn, applyFiles)
 		} else {
 			err = applyFiles()
