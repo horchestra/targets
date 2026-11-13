@@ -2,8 +2,12 @@ package host
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"maps"
+	"net/http"
 	"slices"
 	"strings"
 
@@ -130,11 +134,18 @@ func (in *Installation) fileVerdict(ctx context.Context, cn *conn, f osFacts, fi
 		mode = uint32(file.Mode.Perm())
 	}
 	if len(file.URL) > 0 {
-		if local, ok := strings.CutPrefix(file.URL, "file://"); ok {
+		url := f.resolve(file.URL)
+		if local, ok := strings.CutPrefix(url, "file://"); ok {
 			sum, err := shaOfFile(local)
 			if err != nil {
 				return verdict{}, fmt.Errorf("%s: %w", local, err)
 			}
+			return cn.contentVerdict(ctx, file.Path, sum, mode)
+		}
+		if sum, ok, err := hashLoopbackURL(ctx, url); err != nil {
+			return verdict{}, fmt.Errorf("%s: %w", url, err)
+		} else if ok {
+			// a loopback URL is this machine's own server (a registry mirror's): its bytes can be hashed here
 			return cn.contentVerdict(ctx, file.Path, sum, mode)
 		}
 		_, _, exists, err := cn.stateOf(ctx, file.Path)
@@ -230,6 +241,32 @@ func (in *Installation) inspectContainers(ctx context.Context, u render.Unit) (t
 		return target.HoldDiffers, nil
 	}
 	return target.HoldMatches, nil
+}
+
+// hashLoopbackURL is the sha256 of what an http(s) URL on the loopback serves — this machine's own server, a
+// registry mirror's proxy of it. ok is false for any other URL: its bytes are not pack's to fetch here.
+func hashLoopbackURL(ctx context.Context, url string) (sum string, ok bool, err error) {
+	if !strings.HasPrefix(url, "http://127.0.0.1") && !strings.HasPrefix(url, "http://localhost") &&
+		!strings.HasPrefix(url, "https://127.0.0.1") && !strings.HasPrefix(url, "https://localhost") {
+		return "", false, nil
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", true, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", true, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", true, fmt.Errorf("%s", resp.Status)
+	}
+	h := sha256.New()
+	if _, err := io.Copy(h, resp.Body); err != nil {
+		return "", true, err
+	}
+	return hex.EncodeToString(h.Sum(nil)), true, nil
 }
 
 var _ target.Inspector = (*Installation)(nil)

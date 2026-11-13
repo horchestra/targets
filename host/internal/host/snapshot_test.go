@@ -2,6 +2,8 @@ package host
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -66,5 +68,23 @@ func TestSnapshotLocal(t *testing.T) {
 	}
 	if _, err := os.Stat(path); err == nil {
 		t.Error("a file without a snapshot stayed")
+	}
+}
+
+// TestHashLoopbackURL: a loopback URL's bytes are hashed here, any other URL is not fetched.
+func TestHashLoopbackURL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("served"))
+	}))
+	defer srv.Close()
+	sum, ok, err := hashLoopbackURL(context.Background(), srv.URL+"/f")
+	if err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	if sum != shaOf([]byte("served")) {
+		t.Errorf("sum = %q", sum)
+	}
+	if _, ok, err := hashLoopbackURL(context.Background(), "https://example.com/f"); err != nil || ok {
+		t.Error("an outside URL is not pack's to fetch")
 	}
 }
