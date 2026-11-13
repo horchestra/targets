@@ -256,11 +256,11 @@ func hashLoopbackURL(ctx context.Context, url string) (sum string, ok bool, err 
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", true, err
+		return "", false, nil // the server is not up: content cannot be judged, the presence below decides
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", true, fmt.Errorf("%s", resp.Status)
+		return "", true, nil // answered, but not the artifact: a sum that matches nothing — the apply's fetch says why
 	}
 	h := sha256.New()
 	if _, err := io.Copy(h, resp.Body); err != nil {

@@ -87,4 +87,14 @@ func TestHashLoopbackURL(t *testing.T) {
 	if _, ok, err := hashLoopbackURL(context.Background(), "https://example.com/f"); err != nil || ok {
 		t.Error("an outside URL is not pack's to fetch")
 	}
+	url := srv.URL
+	srv.Close()
+	if _, ok, err := hashLoopbackURL(context.Background(), url); err != nil || ok {
+		t.Error("a server that is not up: the presence decides, no error")
+	}
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNotFound) }))
+	defer down.Close()
+	if sum, ok, err := hashLoopbackURL(context.Background(), down.URL); err != nil || !ok || len(sum) > 0 {
+		t.Error("a 404 is a sum that matches nothing: differs, and the apply's fetch says why")
+	}
 }
