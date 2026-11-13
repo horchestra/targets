@@ -39,11 +39,19 @@ wget: a URL a pack names is the agent's own download.
 | `hosts.<name>.identity`                   | —                            | A private key file (else the ssh agent, else the default key files).                    |
 | `hosts.<name>.knownhosts`, `.insecure`    | `~/.ssh/known_hosts`         | The host key's check; `insecure: true` turns it off.                                    |
 | `network`, `network_subnet`, `network_gateway` | the installation's name | The containers' network on each host.                                                   |
-| `state`                                   | `~/.pack/host-state.json`    | The file that keeps the installation's record and the credentials pack provisioned.      |
+| `state`                                   | `~/.pack/host-state.json`    | The file that keeps the installation's record and the credentials pack provisioned. Not kept with pack's `state: db` or `state: observe`. |
+| `history_count`                           | `0`                          | Snapshots of a managed file kept as `<path>.bak.1…N`, rotated before an overwrite that changes it; the undo of a file step restores `.bak.1`. With pack's `state: observe` the snapshots are the only memory a rollback has. |
 | `secrets.<name>.<key>`                    | —                            | The value `${secret:<name>/<key>}` stands for, when nothing else holds it.              |
 
 Without `hosts` the target is **this machine**: the agent a process of it (sudo when pack is not root), a
 container reached by name on the installation's network, a packages key at the loopback.
+
+## In-process local applies
+
+Go programs already running on the target host can import `github.com/horchestra/targets/host/local` and call
+`local.Register()` before `pack/cmd.Apply`. The registered target uses the same local execution path without SSH or
+an external `pack-target-host` process. Use `Refresh: false` and omit `hosts` and release target sources; keep the
+apply directory between runs so `.pack/state.json` can skip an unchanged installation.
 
 Of a key's entry under `keys:` (the placement) the target reads:
 

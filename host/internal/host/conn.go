@@ -40,6 +40,8 @@ type conn struct {
 	h    *host    // the host's settings; local — this machine
 	link *sshLink // nil for the local host
 
+	history int // the snapshots of a managed file kept (<path>.bak.N); 0 — none
+
 	mu   sync.Mutex
 	sess *session
 }
@@ -428,8 +430,12 @@ func (c *conn) lines(ctx context.Context, argv ...string) ([]string, error) {
 	return ls, nil
 }
 
-// writeFile delivers the content to the path on the host and says whether that changed it.
+// writeFile delivers the content to the path on the host and says whether that changed it. With a history, a
+// snapshot of what is there goes first — unless the write would change nothing.
 func (c *conn) writeFile(ctx context.Context, path string, content []byte, mode uint32) (bool, error) {
+	if err := c.snapshot(ctx, path, shaOf(content), mode); err != nil {
+		return false, fmt.Errorf("%s%s: the snapshot: %w", c.h.prefix(), path, err)
+	}
 	s, err := c.client(ctx)
 	if err != nil {
 		return false, err
@@ -442,13 +448,22 @@ func (c *conn) writeFile(ctx context.Context, path string, content []byte, mode 
 }
 
 // putFile streams a file of this machine — a pack's Source file read from the disk as it goes — to the path on
-// the host and says whether that changed it.
+// the host and says whether that changed it. With a history, a snapshot of what is there goes first.
 func (c *conn) putFile(ctx context.Context, local, path string, mode uint32) (bool, error) {
 	f, err := os.Open(local)
 	if err != nil {
 		return false, fmt.Errorf("%s%s: %w", c.h.prefix(), local, err)
 	}
 	defer func() { _ = f.Close() }()
+	if c.history > 0 {
+		sum, err := shaOfFile(local)
+		if err != nil {
+			return false, fmt.Errorf("%s%s: %w", c.h.prefix(), local, err)
+		}
+		if err := c.snapshot(ctx, path, sum, mode); err != nil {
+			return false, fmt.Errorf("%s%s: the snapshot: %w", c.h.prefix(), path, err)
+		}
+	}
 	s, err := c.client(ctx)
 	if err != nil {
 		return false, err
@@ -495,11 +510,31 @@ func (c *conn) removeFile(ctx context.Context, path string) error {
 }
 
 // fetch downloads the URL to the path on the host — the agent's own HTTP client — and says whether that changed
-// it.
+// it. With a history the download lands beside the path first: only a download that differs replaces the file,
+// and a snapshot of it goes before.
 func (c *conn) fetch(ctx context.Context, url, path string, mode uint32) (bool, error) {
 	s, err := c.client(ctx)
 	if err != nil {
 		return false, err
+	}
+	if c.history > 0 {
+		staging := path + ".pack-staging"
+		_ = c.removeFile(ctx, staging)
+		if _, err := s.cli.Fetch(ctx, &agentpb.FetchRequest{Url: url, Path: staging, Mode: mode}); err != nil {
+			return false, fmt.Errorf("%s%s: %w", c.h.prefix(), url, err)
+		}
+		same := fmt.Sprintf("[ -f %[1]s ] && cmp -s %[1]s %[2]s", shq(path), shq(staging))
+		if _, err := c.exec(ctx, []string{"sh", "-c", same}, nil, nil, nil); err == nil {
+			_ = c.removeFile(ctx, staging)
+			return false, nil // what is there is what the URL gives
+		}
+		if err := c.rotate(ctx, path); err != nil {
+			return false, fmt.Errorf("%s%s: the snapshot: %w", c.h.prefix(), path, err)
+		}
+		if _, err := c.exec(ctx, []string{"mv", staging, path}, nil, nil, nil); err != nil {
+			return false, fmt.Errorf("%s%s: %w", c.h.prefix(), path, err)
+		}
+		return true, nil
 	}
 	res, err := s.cli.Fetch(ctx, &agentpb.FetchRequest{Url: url, Path: path, Mode: mode})
 	if err != nil {

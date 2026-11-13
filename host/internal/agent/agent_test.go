@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync/atomic"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -204,5 +205,35 @@ func TestFetch(t *testing.T) {
 	}
 	if _, err := cli.Fetch(ctx(), &agentpb.FetchRequest{Url: srv.URL + "/f", Path: "relative"}); err == nil {
 		t.Error("a relative path is accepted")
+	}
+}
+
+func TestFetchRetriesInterruptedDownload(t *testing.T) {
+	cli := serve(t)
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if attempts.Add(1) == 1 {
+			w.Header().Set("Content-Length", "10")
+			_, _ = w.Write([]byte("part"))
+			return
+		}
+		_, _ = w.Write([]byte("downloaded"))
+	}))
+	t.Cleanup(srv.Close)
+
+	path := filepath.Join(t.TempDir(), "vpn-provider-awg")
+	res, err := cli.Fetch(ctx(), &agentpb.FetchRequest{Url: srv.URL, Path: path, Mode: 0o755})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Changed {
+		t.Error("retried fetch: changed = false")
+	}
+	content, err := os.ReadFile(path)
+	if err != nil || string(content) != "downloaded" {
+		t.Fatalf("content = %q, %v", content, err)
+	}
+	if got := attempts.Load(); got != 2 {
+		t.Fatalf("attempts = %d, want 2", got)
 	}
 }

@@ -30,8 +30,11 @@ import (
 //   - network, network_subnet, network_gateway: the containers' network on each host, default the installation's
 //     name;
 //   - state: the file that keeps the installation's record and the credentials pack provisioned, default
-//     ~/.pack/host-state.json. Not with pack's `state: db`: then the record is pack's database's, the credentials
-//     the store's, and a file is refused;
+//     ~/.pack/host-state.json. Not with pack's `state: db` or `state: observe`: then the record is pack's
+//     database's or is not kept at all, and a file is refused;
+//   - history_count: how many snapshots of a managed file are kept (<path>.bak.1 the newest), rotated before an
+//     overwrite that changes it; 0 (the default) — none. The snapshots are what undoes a file step where pack
+//     keeps no record (state: observe);
 //   - mirror_registry, mirror_plain_http, mirror_port, mirror_username_env, mirror_password_env: the package
 //     repositories are artifacts of this registry, served to the host's package manager over the loopback while
 //     it installs;
@@ -43,9 +46,13 @@ import (
 // The user the SSH connects as needs to be root, or to have passwordless sudo (the agent runs under sudo -n).
 func Factory(installation string, set map[string]string) (target.Installation, error) {
 	settings := target.Settings(set)
-	names := append([]string{"network", "network_subnet", "network_gateway", "state",
+	names := append([]string{"network", "network_subnet", "network_gateway", "state", "history_count",
 		"mirror_registry", "mirror_plain_http", "mirror_port", "mirror_username_env", "mirror_password_env"}, secretstore.SettingKeys...)
 	if err := settings.Check("host", names, []string{"hosts_", "secrets_"}); err != nil {
+		return nil, err
+	}
+	history, err := historyOf(settings)
+	if err != nil {
 		return nil, err
 	}
 	m, err := mirrorOf(settings)
@@ -57,6 +64,7 @@ func Factory(installation string, set map[string]string) (target.Installation, e
 		network:      settings.Get("network", installation),
 		settings:     settings,
 		mirror:       m,
+		history:      history,
 		hosts:        map[string]*host{},
 		platform:     map[string]map[string]any{},
 	}
@@ -107,7 +115,7 @@ func Factory(installation string, set map[string]string) (target.Installation, e
 		in.local = h
 	}
 	for _, h := range in.order {
-		h.c = &conn{h: h}
+		h.c = &conn{h: h, history: history}
 		if !h.local {
 			h.c.link = &sshLink{h: h}
 		}
@@ -115,7 +123,9 @@ func Factory(installation string, set map[string]string) (target.Installation, e
 	if path := settings.Get("state", ""); len(path) > 0 && settings.Get(target.SettingPackState, "") == "db" {
 		return nil, fmt.Errorf("state %s: pack keeps the record in its state database (state: db) — the target's file would not outlive the run; drop `state:`, the credentials are the store's", path)
 	}
-	if settings.Get(target.SettingPackState, "") != "db" {
+	switch settings.Get(target.SettingPackState, "") {
+	case "db", "observe": // the record is the database's, or is not kept at all: no file of the target's
+	default:
 		file, err := newFileState(settings.Get("state", "~/.pack/host-state.json"), installation)
 		if err != nil {
 			return nil, err
@@ -170,6 +180,7 @@ type Installation struct {
 	settings              target.Settings
 	state                 state
 	mirror                *mirror
+	history               int // snapshots of a managed file kept (<path>.bak.N); 0 — none
 	hosts                 map[string]*host
 	order                 []*host // by name
 	local                 *host   // set when the environment names no hosts
@@ -494,6 +505,20 @@ func mirrorOf(s target.Settings) (*mirror, error) {
 	return m, nil
 }
 
+// historyOf is the snapshots a managed file keeps: history_count of the environment, 0 when it says none.
+func historyOf(s target.Settings) (int, error) {
+	v := s.Get("history_count", "")
+	if len(v) == 0 {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("history_count %q: a number, 0 or more", v)
+	}
+	return n, nil
+}
+
+// parsePort is a port number.
 func parsePort(s string) (uint32, error) {
 	p, err := strconv.ParseUint(s, 10, 32)
 	if err != nil || p == 0 {

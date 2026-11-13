@@ -20,11 +20,17 @@ func hostHook(u *render.Unit) bool {
 
 // ReadInstalled reads the record from the installation's state file.
 func (in *Installation) ReadInstalled() ([]byte, bool, error) {
+	if in.state == nil {
+		return nil, false, fmt.Errorf("pack keeps no record with this target (state: db or observe)")
+	}
 	return in.state.read()
 }
 
 // WriteInstalled keeps the record in the installation's state file.
 func (in *Installation) WriteInstalled(record []byte) error {
+	if in.state == nil {
+		return fmt.Errorf("pack keeps no record with this target (state: db or observe)")
+	}
 	return in.state.write(record)
 }
 
@@ -32,6 +38,9 @@ func (in *Installation) WriteInstalled(record []byte) error {
 // Only the record: the packages and the delivered files' removal are the remove steps', the claims' data volumes
 // stay, and so do the credentials' volumes on an engine.
 func (in *Installation) DeleteInstalled() error {
+	if in.state == nil {
+		return nil
+	}
 	return in.state.remove()
 }
 
@@ -88,7 +97,11 @@ func (in *Installation) Execute(ctx context.Context, st target.Step, events func
 		if len(u.Image) > 0 {
 			return in.removeContainers(ctx, st.Key, events)
 		}
-		return in.removeFiles(ctx, *u, events)
+		if st.Rollback {
+			// the undo of an apply: the snapshots go back, a file without one was the step's own and is deleted
+			return in.restoreFiles(ctx, *u, events)
+		}
+		return in.removeFiles(ctx, *u, st.Destroy, events)
 	case "hook":
 		if hostHook(st.Unit) {
 			return in.execCommand(ctx, st, timeout, events)

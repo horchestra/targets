@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-	if err := remote.Serve("host", host.Factory, remote.CapRecord, remote.CapDiscover, remote.CapLogs, remote.CapHealth, remote.CapFileURL); err != nil {
+	if err := remote.Serve("host", host.Factory, remote.CapRecord, remote.CapDiscover, remote.CapLogs, remote.CapHealth, remote.CapFileURL, remote.CapInspect); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "pack-target-host:", err)
 		os.Exit(1)
 	}

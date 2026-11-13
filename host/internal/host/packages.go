@@ -486,8 +486,9 @@ func (in *Installation) stopServices(ctx context.Context, u render.Unit, events 
 }
 
 // removeFiles stops the key's services and deletes the files it delivered. Its packages stay: another key may
-// need them, and removing one is no safe rollback — pack delete does not take them either.
-func (in *Installation) removeFiles(ctx context.Context, u render.Unit, events func(string)) error {
+// need them, and removing one is no safe rollback — only pack delete --destroy takes them (destroy), by name and
+// without autoremove.
+func (in *Installation) removeFiles(ctx context.Context, u render.Unit, destroy bool, events func(string)) error {
 	if err := in.stopServices(ctx, u, events); err != nil {
 		return err
 	}
@@ -521,12 +522,129 @@ func (in *Installation) removeFiles(ctx context.Context, u render.Unit, events f
 				return fmt.Errorf("%s: %s: %w", u.Key, path, err)
 			}
 		}
+		if destroy {
+			if err := in.destroyPackages(ctx, cn, u, p, f, events); err != nil {
+				return fmt.Errorf("%s: %s: %w", u.Key, cn.h.name, err)
+			}
+		}
 		rules, err := in.firewallOf(u.Key)
 		if err != nil {
 			return err
 		}
 		if err := cn.removeFirewall(ctx, f, rules, events); err != nil {
 			return fmt.Errorf("%s: %w", u.Key, err)
+		}
+	}
+	return nil
+}
+
+// destroyPackages takes the key's packages away, by name, without autoremove: pack delete --destroy, a host the
+// installation has to itself. What stood before the key came is not told apart — the flag is the operator saying
+// the host is the installation's.
+func (in *Installation) destroyPackages(ctx context.Context, cn *conn, u render.Unit, p *render.Packages, f osFacts, events func(string)) error {
+	var names []string
+	if p != nil {
+		names = append(names, p.Names...)
+	}
+	platform := in.platformFor(u.Key)
+	all, _ := packagesOf(platform["packages"])
+	names = append(names, all...)
+	if len(names) == 0 {
+		return nil
+	}
+	if svcs := stringsOf(platform["services"]); len(svcs) > 0 {
+		for _, svc := range svcs {
+			if _, err := cn.exec(ctx, []string{"systemctl", "disable", svc}, nil, nil, events); err != nil {
+				return fmt.Errorf("%s: %w", svc, err)
+			}
+		}
+	}
+	// pins and package-file URLs are not the remove's names: the package's own name is
+	var plain []string
+	for _, n := range names {
+		n = f.resolve(n)
+		if strings.Contains(n, "://") {
+			continue
+		}
+		base, _, _ := strings.Cut(n, "=")
+		plain = append(plain, base)
+	}
+	switch f.family {
+	case "debian":
+		_, err := cn.exec(ctx, append([]string{"apt-get", "remove", "-y"}, plain...), aptEnv, nil, events)
+		return err
+	case "rhel":
+		_, err := cn.exec(ctx, append([]string{"dnf", "remove", "-y"}, plain...), nil, nil, events)
+		return err
+	}
+	return fmt.Errorf("%sthe OS family %q is not known (debian, rhel)", cn.h.prefix(), f.family)
+}
+
+// restoreFiles undoes an apply: the snapshots of the key's files go back to their places (a file without one was
+// the step's own and is deleted), the services run what was restored. Without a history there is nothing to
+// restore from: the files go, as a remove says.
+func (in *Installation) restoreFiles(ctx context.Context, u render.Unit, events func(string)) error {
+	if err := in.stopServices(ctx, u, events); err != nil {
+		return err
+	}
+	cns, err := in.conns(u.Key, in.platformFor(u.Key))
+	if err != nil {
+		return err
+	}
+	restored := false
+	for _, cn := range cns {
+		if cn.history <= 0 {
+			files := u.Files
+			if p, _, err := in.packagesOn(ctx, cn, u); err != nil {
+				return err
+			} else if p != nil {
+				files = p.Files
+			}
+			for _, f := range files {
+				if err := cn.removeFile(ctx, f.Path); err != nil {
+					return fmt.Errorf("%s: %s: %w", u.Key, f.Path, err)
+				}
+			}
+			continue
+		}
+		var paths []string
+		for _, f := range u.Files {
+			paths = append(paths, f.Path)
+		}
+		for _, f := range u.SecretFiles {
+			paths = append(paths, f.Path)
+		}
+		if p, _, err := in.packagesOn(ctx, cn, u); err != nil {
+			return err
+		} else if p != nil {
+			for _, f := range p.Files {
+				paths = append(paths, f.Path)
+			}
+			for _, f := range p.Repo {
+				paths = append(paths, f.Path)
+			}
+		}
+		sysctlF, modulesF := kernelFiles(u.Key)
+		paths = append(paths, sysctlF, modulesF)
+		for _, path := range paths {
+			r, err := cn.restore(ctx, path)
+			if err != nil {
+				return fmt.Errorf("%s: %s: %w", u.Key, path, err)
+			}
+			restored = restored || r
+		}
+	}
+	if !restored {
+		return nil
+	}
+	// run again what was restored
+	for _, cn := range cns {
+		svcs, err := in.servicesOn(ctx, cn, u)
+		if err != nil {
+			return err
+		}
+		if err := cn.startServices(ctx, svcs, true, events); err != nil {
+			return err
 		}
 	}
 	return nil
