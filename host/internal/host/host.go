@@ -108,7 +108,7 @@ func Factory(installation string, set map[string]string) (target.Installation, e
 		in.order = append(in.order, h)
 	}
 	if len(in.order) == 0 {
-		// this machine is the one host: the agent a process of it, a neighbour reaching a container by name, a
+		// this machine is the one host: the agent in this process, a neighbour reaching a container by name, a
 		// package key at the loopback
 		h := &host{address: "127.0.0.1", local: true}
 		in.order = []*host{h}

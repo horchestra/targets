@@ -9,13 +9,8 @@ import (
 	"testing"
 )
 
-// TestLocalConn is the agent as a process of this machine, end to end: unpacked from the embedded binary,
-// started, spoken to over gRPC. It skips when `make agent` built no agent of this platform (the checkout keeps
-// placeholders).
+// TestLocalConn exercises the local agent through direct calls, without a transport.
 func TestLocalConn(t *testing.T) {
-	if _, _, err := agentProgram(runtime.GOOS, runtime.GOARCH); err != nil {
-		t.Skip(err)
-	}
 	h := &host{address: "127.0.0.1", local: true}
 	h.c = &conn{h: h}
 	ctx := context.Background()
@@ -24,6 +19,9 @@ func TestLocalConn(t *testing.T) {
 	out, err := h.c.exec(ctx, []string{"echo", "hello"}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if h.c.sess.local == nil || h.c.sess.cli != nil || h.c.sess.gc != nil {
+		t.Fatalf("local session uses a transport: %+v", h.c.sess)
 	}
 	if strings.TrimSpace(string(out)) != "hello" {
 		t.Errorf("echo = %q", out)

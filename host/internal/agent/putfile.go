@@ -1,8 +1,9 @@
 package agent
 
 import (
+	"bytes"
+	"context"
 	"crypto/sha256"
-	"errors"
 	"hash"
 	"io"
 	"io/fs"
@@ -22,59 +23,69 @@ func (s *Server) PutFile(stream agentpb.Agent_PutFileServer) error {
 	if err != nil {
 		return status.Errorf(codes.InvalidArgument, "put: %v", err)
 	}
-	if len(first.Path) == 0 || first.Path[0] != '/' {
-		return status.Error(codes.InvalidArgument, "put: an absolute path")
+	reader := io.MultiReader(bytes.NewReader(first.Chunk), &putStreamReader{stream: stream})
+	changed, err := s.Put(stream.Context(), first.Path, first.Mode, reader)
+	if err != nil {
+		return err
 	}
-	mode := fs.FileMode(first.Mode).Perm()
+	return stream.SendAndClose(&agentpb.PutFileResponse{Changed: changed})
+}
+
+// Put writes a stream directly to a file without a gRPC transport.
+func (s *Server) Put(_ context.Context, path string, fileMode uint32, reader io.Reader) (bool, error) {
+	if len(path) == 0 || path[0] != '/' {
+		return false, status.Error(codes.InvalidArgument, "put: an absolute path")
+	}
+	mode := fs.FileMode(fileMode).Perm()
 	if mode == 0 {
 		mode = 0o644
 	}
-	dir := filepath.Dir(first.Path)
+	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return status.Errorf(codes.Internal, "put %s: %v", first.Path, err)
+		return false, status.Errorf(codes.Internal, "put %s: %v", path, err)
 	}
 	tmp, err := os.CreateTemp(dir, ".pack-put-*")
 	if err != nil {
-		return status.Errorf(codes.Internal, "put %s: %v", first.Path, err)
+		return false, status.Errorf(codes.Internal, "put %s: %v", path, err)
 	}
 	defer func() { _ = os.Remove(tmp.Name()) }()
 	h := sha256.New()
 	w := io.MultiWriter(tmp, h)
-	if err := writeChunks(w, first.Chunk, stream); err != nil {
+	if _, err := io.Copy(w, reader); err != nil {
 		_ = tmp.Close()
-		return status.Errorf(codes.Internal, "put %s: %v", first.Path, err)
+		return false, status.Errorf(codes.Internal, "put %s: %v", path, err)
 	}
 	if err := tmp.Close(); err != nil {
-		return status.Errorf(codes.Internal, "put %s: %v", first.Path, err)
+		return false, status.Errorf(codes.Internal, "put %s: %v", path, err)
 	}
-	if sameDigest(h, first.Path, mode) {
-		return stream.SendAndClose(&agentpb.PutFileResponse{})
+	if sameDigest(h, path, mode) {
+		return false, nil
 	}
 	if err := os.Chmod(tmp.Name(), mode); err != nil {
-		return status.Errorf(codes.Internal, "put %s: %v", first.Path, err)
+		return false, status.Errorf(codes.Internal, "put %s: %v", path, err)
 	}
-	if err := os.Rename(tmp.Name(), first.Path); err != nil {
-		return status.Errorf(codes.Internal, "put %s: %v", first.Path, err)
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return false, status.Errorf(codes.Internal, "put %s: %v", path, err)
 	}
-	return stream.SendAndClose(&agentpb.PutFileResponse{Changed: true})
+	return true, nil
 }
 
-func writeChunks(w io.Writer, first []byte, stream agentpb.Agent_PutFileServer) error {
-	if _, err := w.Write(first); err != nil {
-		return err
-	}
-	for {
-		req, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
+type putStreamReader struct {
+	stream  agentpb.Agent_PutFileServer
+	pending []byte
+}
+
+func (r *putStreamReader) Read(p []byte) (int, error) {
+	for len(r.pending) == 0 {
+		req, err := r.stream.Recv()
 		if err != nil {
-			return err
+			return 0, err
 		}
-		if _, err := w.Write(req.Chunk); err != nil {
-			return err
-		}
+		r.pending = req.Chunk
 	}
+	n := copy(p, r.pending)
+	r.pending = r.pending[n:]
+	return n, nil
 }
 
 // sameDigest: the path is already exactly the streamed bytes — their digest h was taken as the chunks went by,

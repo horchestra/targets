@@ -126,10 +126,21 @@ func family(osr map[string]string) string {
 // Exec runs the request's argv — never a shell — streaming the output's lines as they come, the last event the
 // exit code.
 func (s *Server) Exec(req *agentpb.ExecRequest, stream agentpb.Agent_ExecServer) error {
-	if len(req.Argv) == 0 {
-		return status.Error(codes.InvalidArgument, "exec: no argv")
+	code, err := s.Run(stream.Context(), req, func(line string) error {
+		return stream.Send(&agentpb.ExecEvent{Line: line})
+	})
+	if err != nil {
+		return err
 	}
-	cmd := exec.CommandContext(stream.Context(), req.Argv[0], req.Argv[1:]...)
+	return stream.Send(&agentpb.ExecEvent{Done: true, Exit: int32(code)})
+}
+
+// Run executes a command directly and emits its output lines as they arrive.
+func (s *Server) Run(ctx context.Context, req *agentpb.ExecRequest, emit func(string) error) (int, error) {
+	if len(req.Argv) == 0 {
+		return 0, status.Error(codes.InvalidArgument, "exec: no argv")
+	}
+	cmd := exec.CommandContext(ctx, req.Argv[0], req.Argv[1:]...)
 	cmd.Env = append(os.Environ(), req.Env...)
 	if len(req.Stdin) > 0 {
 		cmd.Stdin = bytes.NewReader(req.Stdin)
@@ -141,7 +152,7 @@ func (s *Server) Exec(req *agentpb.ExecRequest, stream agentpb.Agent_ExecServer)
 		sc := bufio.NewScanner(pr)
 		sc.Buffer(make([]byte, 64<<10), 4<<20)
 		for sc.Scan() {
-			if err := stream.Send(&agentpb.ExecEvent{Line: sc.Text()}); err != nil {
+			if err := emit(sc.Text()); err != nil {
 				scanDone <- err
 				return
 			}
@@ -157,13 +168,13 @@ func (s *Server) Exec(req *agentpb.ExecRequest, stream agentpb.Agent_ExecServer)
 		if errors.As(runErr, &ee) {
 			code = ee.ExitCode()
 		} else {
-			return status.Errorf(codes.Internal, "exec %s: %v", req.Argv[0], runErr)
+			return 0, status.Errorf(codes.Internal, "exec %s: %v", req.Argv[0], runErr)
 		}
 	}
 	if scanErr != nil {
-		return status.Errorf(codes.Internal, "exec %s: %v", req.Argv[0], scanErr)
+		return 0, status.Errorf(codes.Internal, "exec %s: %v", req.Argv[0], scanErr)
 	}
-	return stream.Send(&agentpb.ExecEvent{Done: true, Exit: int32(code)})
+	return code, nil
 }
 
 // WriteFile writes the content to the path, its directory made first, atomically (a temporary file renamed), and

@@ -12,9 +12,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -23,19 +20,19 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/horchestra/targets/host/internal/agent"
 	"github.com/horchestra/targets/host/internal/agentpb"
 )
 
-// The agent the driver carries for the hosts' platforms: `make agent` builds them. A host runs the one of its
-// architecture; a local host runs its own, so the driver itself is a place the agent of this machine comes from.
+// The agent the driver carries for remote hosts' platforms: `make agent` builds them. A remote host runs the one
+// of its architecture; local operations call the agent implementation directly.
 //
 //go:embed all:agentbin
 var agentBin embed.FS
 
-// conn is the driver side of one host's agent: the agent's binary brought to the host and started there (over
-// SSH, or as a process of this machine for the local host), its loopback port reached through the connection,
-// every call carrying the token it was started with. The agent lives as long as the session; a connection found
-// dead is dialed again and the agent started anew — a step that was cut short is repeated by the saga.
+// conn is the driver side of one host's agent: a remote agent's binary brought to the host over SSH, or direct
+// calls to the local agent implementation. A remote agent lives as long as the session; a connection found dead is
+// dialed again and the agent started anew — a step that was cut short is repeated by the saga.
 type conn struct {
 	h    *host    // the host's settings; local — this machine
 	link *sshLink // nil for the local host
@@ -46,12 +43,13 @@ type conn struct {
 	sess *session
 }
 
-// session is a running agent: its gRPC client and what ends it.
+// session is a remote client or the local agent implementation.
 type session struct {
-	cli  agentpb.AgentClient
-	gc   *grpc.ClientConn
-	info *agentpb.InfoResponse
-	stop func() // close the stdin, wait for the exit
+	cli   agentpb.AgentClient
+	local *agent.Server
+	gc    *grpc.ClientConn
+	info  *agentpb.InfoResponse
+	stop  func()
 }
 
 // agentProgram is the embedded agent for GOOS/GOARCH and its checksum.
@@ -107,9 +105,8 @@ func (c *conn) reset() {
 	}
 }
 
-// start brings the agent's binary to the host and runs it: over SSH (the sha256 of what is there decides the
-// upload, sudo -n for a user that is not root), or as a process of this machine. The agent says its loopback
-// address on stdout's first line; the gRPC calls go through the connection.
+// start runs a remote agent over SSH (the sha256 of what is there decides the upload, sudo -n for a user that is
+// not root), or selects direct local operations. Remote gRPC calls go through the SSH connection.
 func (c *conn) start(ctx context.Context) (*session, error) {
 	if c.h.local {
 		return c.startLocal(ctx)
@@ -205,87 +202,20 @@ func (c *conn) startRemote(ctx context.Context) (*session, error) {
 	return s, nil
 }
 
-// startLocal runs the agent as a process of this machine: the embedded binary of this platform, unpacked into
-// the cache directory by its checksum.
+// startLocal uses the agent implementation directly, without a transport or another process.
 func (c *conn) startLocal(ctx context.Context) (*session, error) {
-	program, sum, err := agentProgram(runtime.GOOS, runtime.GOARCH)
+	srv, err := agent.NewServer("")
 	if err != nil {
 		return nil, err
 	}
-	cache, err := os.UserCacheDir()
+	info, err := srv.Info(ctx, &agentpb.InfoRequest{})
 	if err != nil {
-		cache = os.TempDir()
+		return nil, fmt.Errorf("the local agent: %w", err)
 	}
-	path := filepath.Join(cache, "pack", "agent-"+sum[:16])
-	if _, err := os.Stat(path); err != nil {
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			return nil, err
-		}
-		tmp, err := os.CreateTemp(filepath.Dir(path), ".agent-*")
-		if err != nil {
-			return nil, err
-		}
-		if _, err := tmp.Write(program); err != nil {
-			_ = tmp.Close()
-			return nil, err
-		}
-		_ = tmp.Chmod(0o755)
-		if err := tmp.Close(); err != nil {
-			return nil, err
-		}
-		if err := os.Rename(tmp.Name(), path); err != nil {
-			return nil, err
-		}
+	s := &session{local: srv, info: info}
+	s.stop = func() {
+		_, _ = s.local.ProxyStop(context.Background(), &agentpb.ProxyStopRequest{})
 	}
-	tok := token()
-	argv := []string{path, "-token", tok}
-	if c.h.sudo() {
-		argv = append([]string{"sudo", "-n"}, argv...)
-	}
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return nil, err
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("the agent: %w", err)
-	}
-	addr, err := readListening(stdout)
-	if err != nil {
-		_ = cmd.Process.Kill()
-		return nil, fmt.Errorf("the agent did not start: %w%s", err, stderr.String())
-	}
-	gc, err := grpcClient(addr, tok, func(ctx context.Context) (net.Conn, error) {
-		var d net.Dialer
-		return d.DialContext(ctx, "tcp", addr)
-	})
-	if err != nil {
-		_ = cmd.Process.Kill()
-		return nil, err
-	}
-	s := &session{cli: agentpb.NewAgentClient(gc), gc: gc, stop: func() {
-		_ = stdin.Close()
-		_ = gc.Close()
-		done := make(chan struct{})
-		go func() { _ = cmd.Wait(); close(done) }()
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			_ = cmd.Process.Kill()
-		}
-	}}
-	info, err := s.cli.Info(ctx, &agentpb.InfoRequest{})
-	if err != nil {
-		s.stop()
-		return nil, fmt.Errorf("the agent does not answer: %w", err)
-	}
-	s.info = info
 	return s, nil
 }
 
@@ -379,13 +309,36 @@ func (c *conn) exec(ctx context.Context, argv []string, env []string, stdin []by
 	if err != nil {
 		return nil, err
 	}
+	var out strings.Builder
+	var tail []string
+	emit := func(line string) {
+		out.WriteString(line)
+		out.WriteByte('\n')
+		if events != nil {
+			events(c.h.prefix() + line)
+		}
+		if tail = append(tail, line); len(tail) > 20 {
+			tail = tail[1:]
+		}
+	}
+	if s.local != nil {
+		code, err := s.local.Run(ctx, &agentpb.ExecRequest{Argv: argv, Env: env, Stdin: stdin}, func(line string) error {
+			emit(line)
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("%s%s: %w", c.h.prefix(), argv[0], err)
+		}
+		if code != 0 {
+			return nil, fmt.Errorf("%s%s: exit %d: %s", c.h.prefix(), argv[0], code, strings.Join(tail, "; "))
+		}
+		return []byte(out.String()), nil
+	}
 	stream, err := s.cli.Exec(ctx, &agentpb.ExecRequest{Argv: argv, Env: env, Stdin: stdin})
 	if err != nil {
 		c.reset()
 		return nil, fmt.Errorf("%s%s: %w", c.h.prefix(), argv[0], err)
 	}
-	var out strings.Builder
-	var tail []string
 	code := 0
 	for {
 		ev, err := stream.Recv()
@@ -400,14 +353,7 @@ func (c *conn) exec(ctx context.Context, argv []string, env []string, stdin []by
 			code = int(ev.Exit)
 			break
 		}
-		out.WriteString(ev.Line)
-		out.WriteByte('\n')
-		if events != nil {
-			events(c.h.prefix() + ev.Line)
-		}
-		if tail = append(tail, ev.Line); len(tail) > 20 {
-			tail = tail[1:]
-		}
+		emit(ev.Line)
 	}
 	if code != 0 {
 		return nil, fmt.Errorf("%s%s: exit %d: %s", c.h.prefix(), argv[0], code, strings.Join(tail, "; "))
@@ -440,7 +386,13 @@ func (c *conn) writeFile(ctx context.Context, path string, content []byte, mode 
 	if err != nil {
 		return false, err
 	}
-	res, err := s.cli.WriteFile(ctx, &agentpb.WriteFileRequest{Path: path, Content: content, Mode: mode})
+	req := &agentpb.WriteFileRequest{Path: path, Content: content, Mode: mode}
+	var res *agentpb.WriteFileResponse
+	if s.local != nil {
+		res, err = s.local.WriteFile(ctx, req)
+	} else {
+		res, err = s.cli.WriteFile(ctx, req)
+	}
 	if err != nil {
 		return false, fmt.Errorf("%s%s: %w", c.h.prefix(), path, err)
 	}
@@ -467,6 +419,13 @@ func (c *conn) putFile(ctx context.Context, local, path string, mode uint32) (bo
 	s, err := c.client(ctx)
 	if err != nil {
 		return false, err
+	}
+	if s.local != nil {
+		changed, err := s.local.Put(ctx, path, mode, f)
+		if err != nil {
+			return false, fmt.Errorf("%s%s: %w", c.h.prefix(), path, err)
+		}
+		return changed, nil
 	}
 	stream, err := s.cli.PutFile(ctx)
 	if err != nil {
@@ -503,7 +462,12 @@ func (c *conn) removeFile(ctx context.Context, path string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := s.cli.RemoveFile(ctx, &agentpb.RemoveFileRequest{Path: path}); err != nil {
+	if s.local != nil {
+		_, err = s.local.RemoveFile(ctx, &agentpb.RemoveFileRequest{Path: path})
+	} else {
+		_, err = s.cli.RemoveFile(ctx, &agentpb.RemoveFileRequest{Path: path})
+	}
+	if err != nil {
 		return fmt.Errorf("%s%s: %w", c.h.prefix(), path, err)
 	}
 	return nil
@@ -520,7 +484,12 @@ func (c *conn) fetch(ctx context.Context, url, path string, mode uint32) (bool, 
 	if c.history > 0 {
 		staging := path + ".pack-staging"
 		_ = c.removeFile(ctx, staging)
-		if _, err := s.cli.Fetch(ctx, &agentpb.FetchRequest{Url: url, Path: staging, Mode: mode}); err != nil {
+		if s.local != nil {
+			_, err = s.local.Fetch(ctx, &agentpb.FetchRequest{Url: url, Path: staging, Mode: mode})
+		} else {
+			_, err = s.cli.Fetch(ctx, &agentpb.FetchRequest{Url: url, Path: staging, Mode: mode})
+		}
+		if err != nil {
 			return false, fmt.Errorf("%s%s: %w", c.h.prefix(), url, err)
 		}
 		same := fmt.Sprintf("[ -f %[1]s ] && cmp -s %[1]s %[2]s", shq(path), shq(staging))
@@ -536,7 +505,13 @@ func (c *conn) fetch(ctx context.Context, url, path string, mode uint32) (bool, 
 		}
 		return true, nil
 	}
-	res, err := s.cli.Fetch(ctx, &agentpb.FetchRequest{Url: url, Path: path, Mode: mode})
+	req := &agentpb.FetchRequest{Url: url, Path: path, Mode: mode}
+	var res *agentpb.FetchResponse
+	if s.local != nil {
+		res, err = s.local.Fetch(ctx, req)
+	} else {
+		res, err = s.cli.Fetch(ctx, req)
+	}
 	if err != nil {
 		return false, fmt.Errorf("%s%s: %w", c.h.prefix(), url, err)
 	}
@@ -553,8 +528,12 @@ func (c *conn) proxyStart(ctx context.Context, m *mirror) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.cli.ProxyStart(ctx, &agentpb.ProxyStartRequest{
-		Registry: m.registry, PlainHttp: m.plainHTTP, Username: m.user, Password: m.password, Port: port})
+	req := &agentpb.ProxyStartRequest{Registry: m.registry, PlainHttp: m.plainHTTP, Username: m.user, Password: m.password, Port: port}
+	if s.local != nil {
+		_, err = s.local.ProxyStart(ctx, req)
+	} else {
+		_, err = s.cli.ProxyStart(ctx, req)
+	}
 	if err != nil {
 		return fmt.Errorf("%soci-proxy: %w", c.h.prefix(), err)
 	}
@@ -564,6 +543,10 @@ func (c *conn) proxyStart(ctx context.Context, m *mirror) error {
 func (c *conn) proxyStop(ctx context.Context) {
 	s, err := c.client(ctx)
 	if err != nil {
+		return
+	}
+	if s.local != nil {
+		_, _ = s.local.ProxyStop(ctx, &agentpb.ProxyStopRequest{})
 		return
 	}
 	_, _ = s.cli.ProxyStop(ctx, &agentpb.ProxyStopRequest{})

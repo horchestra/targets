@@ -43,15 +43,16 @@ wget: a URL a pack names is the agent's own download.
 | `history_count`                           | `0`                          | Snapshots of a managed file kept as `<path>.bak.1…N`, rotated before an overwrite that changes it; the undo of a file step restores `.bak.1`. With pack's `state: observe` the snapshots are the only memory a rollback has. |
 | `secrets.<name>.<key>`                    | —                            | The value `${secret:<name>/<key>}` stands for, when nothing else holds it.              |
 
-Without `hosts` the target is **this machine**: the agent a process of it (sudo when pack is not root), a
-container reached by name on the installation's network, a packages key at the loopback.
+Without `hosts` the target is **this machine**: the agent runs in the driver's process (sudo when pack is not
+root), a container is reached by name on the installation's network, a packages key is at the loopback.
 
 ## In-process local applies
 
 Go programs already running on the target host can import `github.com/horchestra/targets/host/local` and call
-`local.Register()` before `pack/cmd.Apply`. The registered target uses the same local execution path without SSH or
-an external `pack-target-host` process. Use `Refresh: false` and omit `hosts` and release target sources; keep the
-apply directory between runs so `.pack/state.json` can skip an unchanged installation.
+`local.Register()` before `pack/cmd.Apply`. The registered target calls the local agent implementation directly,
+without gRPC, SSH, an external `pack-target-host`, another process, or an embedded agent binary. Use `Refresh:
+false` and omit `hosts` and release target sources. With `state: observe`, an unchanged installation is skipped
+without keeping `.pack/state.json`.
 
 Of a key's entry under `keys:` (the placement) the target reads:
 
