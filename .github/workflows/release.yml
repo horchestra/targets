@@ -1,9 +1,10 @@
 name: release
 
 # a tag <target>/v* (host/v0.1.0, k8s/v0.1.0 — the tags of a Go module in a subdirectory) builds the
-# program of that target for the platforms and attaches pack-target-<target>_<os>_<arch>.tar.gz to the release: the
-# sources release.yaml's `targets:` points at, e.g.
+# program of that target with goreleaser (.goreleaser.<target>.yaml) and attaches
+# pack-target-<target>_<os>_<arch>.tar.gz to the release: the sources release.yaml's `targets:` points at, e.g.
 #   https://github.com/horchestra/targets/releases/download/host/v0.1.0/pack-target-host_{os}_{arch}.tar.gz
+# A host tag also publishes the agents on their own, pack-host-agent-linux-{amd64,arm64}.
 #
 # It also builds the target's image for linux/amd64 and linux/arm64 and pushes it as
 # ghcr.io/horchestra/targets/<target>:<version> — what release.yaml's `targets: {<target>: {image: oci://…}}` names for
@@ -21,19 +22,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: the target of the tag
-        run: echo "TARGET=${GITHUB_REF_NAME%%/*}" >> "$GITHUB_ENV"
+        with:
+          fetch-depth: 0
+      - name: the target and the version of the tag
+        run: |
+          echo "TARGET=${GITHUB_REF_NAME%%/*}" >> "$GITHUB_ENV"
+          echo "VERSION=${GITHUB_REF_NAME#*/}" >> "$GITHUB_ENV"
       - uses: actions/setup-go@v5
         with:
           go-version-file: ${{ env.TARGET }}/go.mod
-      - name: test and archives
+      - name: test
+        run: make test TARGETS="$TARGET"
+      - name: the agents the host target embeds
+        if: env.TARGET == 'host'
+        run: make agent
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean --skip=publish -f .goreleaser.${{ env.TARGET }}.yaml
+        env:
+          GORELEASER_CURRENT_TAG: ${{ env.VERSION }}
+      - name: the agent binaries into dist
+        if: env.TARGET == 'host'
         run: |
-          make test TARGETS="$TARGET"
-          make dist TARGETS="$TARGET"
-          (cd dist && sha256sum * > checksums.txt)
+          jq -r '.[] | select(.type == "Binary" and (.name | startswith("pack-host-agent-"))) | [.name, .path] | @tsv' dist/artifacts.json \
+            | while IFS=$'\t' read -r name path; do cp "$path" "dist/$name"; done
       - uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: |
+            dist/*.tar.gz
+            dist/pack-host-agent-*
+            dist/checksums.txt
           generate_release_notes: true
 
   image:

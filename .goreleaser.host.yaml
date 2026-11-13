@@ -1,0 +1,48 @@
+version: 2
+
+project_name: pack-target-host
+
+# Built with --skip=publish from .github/workflows/release.yml: the tag is host/v* and goreleaser
+# gets it as GORELEASER_CURRENT_TAG, the upload to the release is softprops/action-gh-release.
+
+builds:
+  - id: target
+    dir: host
+    main: .
+    binary: pack-target-host
+    env: [ "CGO_ENABLED=0" ]
+    goos: [ linux, darwin ]
+    goarch: [ amd64, arm64 ]
+    flags: [ -trimpath ]
+    ldflags: [ -s -w ]
+  - id: agent
+    dir: host
+    main: ./cmd/agent
+    binary: pack-host-agent
+    env: [ "CGO_ENABLED=0" ]
+    goos: [ linux ]
+    goarch: [ amd64, arm64 ]
+    flags: [ -trimpath ]
+    ldflags: [ -s -w ]
+
+archives:
+  - id: target
+    ids: [ target ]
+    formats: [ tar.gz ]
+    # the sources release.yaml's `targets:` points at: pack-target-host_{os}_{arch}.tar.gz
+    name_template: "pack-target-host_{{ .Os }}_{{ .Arch }}"
+    files: [ none* ]
+  - id: agent
+    ids: [ agent ]
+    formats: [ binary ]
+    # the agents on their own, for a host that fetches the agent instead of the target pushing it
+    name_template: "pack-host-agent-{{ .Os }}-{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  disable: true

@@ -1,0 +1,34 @@
+version: 2
+
+project_name: pack-target-k8s
+
+# Built with --skip=publish from .github/workflows/release.yml: the tag is k8s/v* and goreleaser
+# gets it as GORELEASER_CURRENT_TAG, the upload to the release is softprops/action-gh-release.
+
+builds:
+  - id: target
+    dir: k8s
+    main: .
+    binary: pack-target-k8s
+    env: [ "CGO_ENABLED=0" ]
+    goos: [ linux, darwin ]
+    goarch: [ amd64, arm64 ]
+    flags: [ -trimpath ]
+    ldflags: [ -s -w ]
+
+archives:
+  - id: target
+    ids: [ target ]
+    formats: [ tar.gz ]
+    # the sources release.yaml's `targets:` points at: pack-target-k8s_{os}_{arch}.tar.gz
+    name_template: "pack-target-k8s_{{ .Os }}_{{ .Arch }}"
+    files: [ none* ]
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  disable: true
