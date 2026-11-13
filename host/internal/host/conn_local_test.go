@@ -53,3 +53,16 @@ func TestLocalConn(t *testing.T) {
 		t.Errorf("facts = %+v", facts)
 	}
 }
+
+func TestContentVerdictMissingFileDiffers(t *testing.T) {
+	h := &host{address: "127.0.0.1", local: true}
+	h.c = &conn{h: h}
+	defer h.c.close()
+	verdict, err := h.c.contentVerdict(context.Background(), filepath.Join(t.TempDir(), "missing"), shaOf([]byte("x")), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verdict.found || !verdict.differed {
+		t.Fatalf("missing file verdict = %+v", verdict)
+	}
+}

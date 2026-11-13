@@ -172,7 +172,7 @@ func (c *conn) contentVerdict(ctx context.Context, path, sum string, mode uint32
 		return verdict{}, fmt.Errorf("%s: %w", path, err)
 	}
 	if !exists {
-		return verdict{}, nil
+		return verdict{differed: true}, nil
 	}
 	ok := has == sum && (mode == 0 || modeOf(hasMode) == mode)
 	return verdict{found: true, differed: !ok}, nil
