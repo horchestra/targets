@@ -4,6 +4,7 @@
 package local
 
 import (
+	"io/fs"
 	"sync"
 
 	"github.com/horchestra/pack/pkg/target"
@@ -15,3 +16,10 @@ var registerOnce sync.Once
 func Register() {
 	registerOnce.Do(func() { target.Register("host", host.Factory) })
 }
+
+// SetAgents gives an embedding program the agents for remote hosts:
+// pack-host-agent-<goos>-<goarch> at the root of f. Only a program that
+// deploys to remote hosts in-process needs it; the agents are the ones
+// a host release publishes on their own (pack-host-agent-linux-{amd64,arm64})
+// or `make agent` builds.
+func SetAgents(f fs.FS) { host.SetAgents(f) }
