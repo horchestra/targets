@@ -14,6 +14,7 @@ import (
 // overwrite that changes the file shifts the snapshots, one that changes nothing leaves them, a restore puts
 // the newest back and a path without a snapshot is removed.
 func TestSnapshotLocal(t *testing.T) {
+	agents = os.DirFS("../../agentbin")
 	if _, _, err := agentProgram(runtime.GOOS, runtime.GOARCH); err != nil {
 		t.Skip(err)
 	}

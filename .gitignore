@@ -2,5 +2,5 @@
 .idea/
 .DS_Store
 /dist
-host/internal/host/agentbin/pack-host-agent-*
-!host/internal/host/agentbin/.gitkeep
+host/agentbin/pack-host-agent-*
+!host/agentbin/.gitkeep

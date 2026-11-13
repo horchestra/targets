@@ -5,11 +5,11 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"embed"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"os"
 	"strings"
@@ -24,11 +24,13 @@ import (
 	"github.com/horchestra/targets/host/internal/agentpb"
 )
 
-// The agent the driver carries for remote hosts' platforms: `make agent` builds them. A remote host runs the one
-// of its architecture; local operations call the agent implementation directly.
-//
-//go:embed all:agentbin
-var agentBin embed.FS
+// The agents for the remote hosts' platforms: only the pack-target-host binary carries them — its main builds
+// them in (SetAgents; `make agent` builds the binaries). Used as a library (the local target, pack's e2e) the
+// package has none, and a remote host fails in agentProgram, not at compile time.
+var agents fs.FS
+
+// SetAgents gives the target the agent binaries: pack-host-agent-<goos>-<goarch> at the root of f.
+func SetAgents(f fs.FS) { agents = f }
 
 // conn is the driver side of one host's agent: a remote agent's binary brought to the host over SSH, or direct
 // calls to the local agent implementation. A remote agent lives as long as the session; a connection found dead is
@@ -54,8 +56,11 @@ type session struct {
 
 // agentProgram is the embedded agent for GOOS/GOARCH and its checksum.
 func agentProgram(goos, goarch string) ([]byte, string, error) {
-	name := fmt.Sprintf("agentbin/pack-host-agent-%s-%s", goos, goarch)
-	b, err := agentBin.ReadFile(name)
+	name := fmt.Sprintf("pack-host-agent-%s-%s", goos, goarch)
+	if agents == nil {
+		return nil, "", fmt.Errorf("this target carries no agents: a library build deploys locally only")
+	}
+	b, err := fs.ReadFile(agents, name)
 	if err != nil || len(b) == 0 {
 		return nil, "", fmt.Errorf("this target has no agent for %s/%s (make agent)", goos, goarch)
 	}

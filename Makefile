@@ -14,11 +14,11 @@ help: ## list the targets
 
 agent: ## the agents the host target carries to the hosts (linux/amd64, linux/arm64)
 	@for a in amd64 arm64; do \
-		(cd host && CGO_ENABLED=0 GOOS=linux GOARCH=$$a $(GO) build -trimpath -ldflags='-s -w' -o internal/host/agentbin/pack-host-agent-linux-$$a ./cmd/agent) || exit 1; \
+		(cd host && CGO_ENABLED=0 GOOS=linux GOARCH=$$a $(GO) build -trimpath -ldflags='-s -w' -o agentbin/pack-host-agent-linux-$$a ./cmd/agent) || exit 1; \
 	done
 
 agent-local: ## plus the agent of this machine's platform (the local mode pack's e2e uses)
-	@(cd host && CGO_ENABLED=0 $(GO) build -trimpath -ldflags='-s -w' -o internal/host/agentbin/pack-host-agent-$(shell $(GO) env GOOS)-$(shell $(GO) env GOARCH) ./cmd/agent)
+	@(cd host && CGO_ENABLED=0 $(GO) build -trimpath -ldflags='-s -w' -o agentbin/pack-host-agent-$(shell $(GO) env GOOS)-$(shell $(GO) env GOARCH) ./cmd/agent)
 
 oci-proxy: ## the standalone oci-proxy of the e2e mirror test: bin/oci-proxy-linux-{amd64,arm64}
 	@for a in amd64 arm64; do \
