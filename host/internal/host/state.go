@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"unicode/utf8"
 )
 
@@ -90,10 +89,10 @@ func (s *fileState) updateFile(change func(*stateFile) bool) error {
 		return err
 	}
 	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+	if err := lockFile(lock); err != nil {
 		return fmt.Errorf("state %s: lock: %w", s.path, err)
 	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) //nolint:errcheck
+	defer unlockFile(lock) //nolint:errcheck
 	f, err := s.load()
 	if err != nil {
 		return err
