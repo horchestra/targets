@@ -3,7 +3,7 @@ module github.com/horchestra/targets/k8s
 go 1.27.1
 
 require (
-	github.com/horchestra/pack v0.8.0
+	github.com/horchestra/pack v0.8.1
 	k8s.io/api v0.37.1
 	k8s.io/apimachinery v0.37.1
 	k8s.io/client-go v0.37.1

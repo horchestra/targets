@@ -4,7 +4,7 @@ go 1.27.1
 
 require (
 	github.com/arenadata/oci-packer v1.0.0
-	github.com/horchestra/pack v0.8.0
+	github.com/horchestra/pack v0.8.1
 	github.com/opencontainers/image-spec v1.1.1
 	golang.org/x/crypto v0.58.0
 	golang.org/x/sys v0.49.0

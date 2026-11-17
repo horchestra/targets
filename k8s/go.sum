@@ -94,6 +94,8 @@ github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 h1:JeSE6pjso5T
 github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674/go.mod h1:r4w70xmWCQKmi1ONH4KIaBptdivuRPyosB9RmPlGEwA=
 github.com/horchestra/pack v0.8.0 h1:nU16+BoZxr7bmPHfHM+eTOa4HjS23AV54zh3nYfMZVY=
 github.com/horchestra/pack v0.8.0/go.mod h1:kpMng8n+gVokFrEeetIA5HlRgbOpXc+haKYMLMOVThc=
+github.com/horchestra/pack v0.8.1 h1:hdWy2FT9If9eJUycY/H8TfZbmmeha7K6l0nGhKU0e98=
+github.com/horchestra/pack v0.8.1/go.mod h1:kpMng8n+gVokFrEeetIA5HlRgbOpXc+haKYMLMOVThc=
 github.com/horchestra/pack/sdk v1.2.1 h1:n5j1cpZ/0MnT7gbwOFkb3hbzqeA96ESaQneUGHpRGVw=
 github.com/horchestra/pack/sdk v1.2.1/go.mod h1:aAG+C2kEc1rGLUfR7jRBKt1R5QFi5W3D4nt/FuesovY=
 github.com/huandu/xstrings v1.5.0 h1:2ag3IFq9ZDANvthTwTiqSSZLjDc+BedvHPAp5tJy2TI=
