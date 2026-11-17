@@ -3,7 +3,9 @@ package host
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	"testing"
+	"time"
 
 	"github.com/horchestra/pack/pkg/render"
 )
@@ -51,6 +53,33 @@ func TestFactoryLocal(t *testing.T) {
 	hosts, err := in.keyHosts("db", map[string]any{})
 	if err != nil || len(hosts) != 1 {
 		t.Errorf("keyHosts = %v, %v", hosts, err)
+	}
+}
+
+func TestInstallationStateLock(t *testing.T) {
+	state := t.TempDir() + "/state.json"
+	first := factory(t, map[string]string{"state": state})
+	second := factory(t, map[string]string{"state": state})
+	unlock, err := first.Lock(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := second.Lock(context.Background()); err == nil {
+		t.Fatal("a second saga took the same state lock")
+	}
+	written := make(chan error, 1)
+	go func() { written <- first.WriteInstalled([]byte(`{"state":"installed"}`)) }()
+	select {
+	case err := <-written:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(100 * time.Millisecond):
+		_ = unlock(context.Background())
+		t.Fatal("the saga lock blocks its own record write")
+	}
+	if err := unlock(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 }
 

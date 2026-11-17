@@ -10,6 +10,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -31,22 +32,51 @@ func (in *Installation) ReadInstalled() ([]byte, bool, error) {
 	cm := &corev1.ConfigMap{}
 	err = c.Get(context.Background(), client.ObjectKey{Namespace: in.namespace, Name: in.recordName()}, cm)
 	if apierrors.IsNotFound(err) {
+		in.recordVersion = ""
 		return nil, false, nil
 	}
 	if err != nil {
 		return nil, false, fmt.Errorf("the record %s: %w", in.recordName(), err)
 	}
+	in.recordVersion = cm.ResourceVersion
 	rec, ok := cm.Data["record.json"]
-	return []byte(rec), ok, nil
+	if !ok {
+		return nil, false, nil
+	}
+	restored, err := in.restoreRecord(context.Background(), []byte(rec))
+	return restored, true, err
 }
 
 // WriteInstalled keeps the record in the ConfigMap pack-<installation>.
 func (in *Installation) WriteInstalled(record []byte) error {
-	cm := obj{"apiVersion": "v1", "kind": "ConfigMap",
-		"metadata": obj{"name": in.recordName(), "namespace": in.namespace,
-			"labels": obj{labelInstance: in.installation, labelManagedBy: "pack", labelPart: "record"}},
-		"data": obj{"record.json": string(record)}}
-	return in.apply(context.Background(), []obj{cm}, nil)
+	record, revisions, err := in.externalizeRecord(record)
+	if err != nil {
+		return err
+	}
+	if err := in.writeRevisions(context.Background(), revisions); err != nil {
+		return err
+	}
+	c, err := in.cluster()
+	if err != nil {
+		return err
+	}
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: in.recordName(), Namespace: in.namespace, ResourceVersion: in.recordVersion,
+			Labels: map[string]string{labelInstance: in.installation, labelManagedBy: "pack", labelPart: "record"},
+		},
+		Data: map[string]string{"record.json": string(record)},
+	}
+	if in.recordVersion == "" {
+		err = c.Create(context.Background(), cm)
+	} else {
+		err = c.Update(context.Background(), cm)
+	}
+	if err != nil {
+		return err
+	}
+	in.recordVersion = cm.ResourceVersion
+	return in.pruneRevisions(context.Background(), revisions)
 }
 
 // records are what List lists: record.json of each ConfigMap managed by

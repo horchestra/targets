@@ -2,6 +2,7 @@ package host
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,7 @@ type state interface {
 	read() ([]byte, bool, error)
 	write(record []byte) error
 	remove() error
+	lock(context.Context) (func(context.Context) error, error)
 	secret(name, key string) (string, bool, error)
 	keep(name, key, value string) error
 }
@@ -30,7 +32,10 @@ type state interface {
 //
 // It holds credentials in plain text: 0600, in a directory made 0700. A write takes an exclusive lock on
 // <file>.lock, reads, changes and replaces the file by rename — a reader sees the old file or the new one.
-type fileState struct{ path, installation string }
+type fileState struct {
+	path, installation string
+	held               *os.File
+}
 
 type stateFile struct {
 	Installations map[string]*installationState `json:"installations"`
@@ -79,20 +84,49 @@ func (s *fileState) load() (*stateFile, error) {
 	return f, nil
 }
 
-// updateFile changes the file under the lock and writes it back.
+func (s *fileState) lock(ctx context.Context) (func(context.Context) error, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
+		return nil, err
+	}
+	lock, err := os.OpenFile(s.path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := tryLockFile(lock); err != nil {
+		_ = lock.Close()
+		return nil, fmt.Errorf("state %s is locked by another pack: %w", s.path, err)
+	}
+	s.held = lock
+	return func(context.Context) error {
+		s.held = nil
+		return errors.Join(unlockFile(lock), lock.Close())
+	}, nil
+}
+
+// updateFile changes the file under the lock and writes it back. The installation's saga lock is already its own.
 func (s *fileState) updateFile(change func(*stateFile) bool) error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
 		return err
+	}
+	if s.held != nil {
+		return s.changeFile(change)
 	}
 	lock, err := os.OpenFile(s.path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return err
 	}
-	defer lock.Close()
+	defer func() { _ = lock.Close() }()
 	if err := lockFile(lock); err != nil {
 		return fmt.Errorf("state %s: lock: %w", s.path, err)
 	}
-	defer unlockFile(lock) //nolint:errcheck
+	defer func() { _ = unlockFile(lock) }()
+	return s.changeFile(change)
+}
+
+func (s *fileState) changeFile(change func(*stateFile) bool) error {
 	f, err := s.load()
 	if err != nil {
 		return err
@@ -108,9 +142,9 @@ func (s *fileState) updateFile(change func(*stateFile) bool) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmp.Name())
+	defer func() { _ = os.Remove(tmp.Name()) }()
 	if _, err := tmp.Write(append(b, '\n')); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return err
 	}
 	if err := tmp.Close(); err != nil {

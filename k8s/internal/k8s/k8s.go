@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -65,6 +66,14 @@ type Installation struct {
 	// storeMu serializes keep's read-modify-write of a secret of the store: steps run side by side, KV v2 has no CAS
 	storeMu sync.Mutex
 
+	recordVersion string
+	lockOwner     string
+	lockStop      chan struct{}
+	lockDone      chan struct{}
+	lockTTL       time.Duration
+	lockRenew     time.Duration
+	lockLost      chan struct{}
+
 	// platform is the target's half of each key's placement as Resolve took it: what the unit of the key is run with.
 	// Resolve is called for the installed version and the wanted one before any step, in this process.
 	platMu   sync.Mutex
@@ -96,7 +105,7 @@ func (in *Installation) Resolve(key string, p render.Placement) (*render.Resolve
 	if len(clusterDomain) > 0 {
 		suffix += "." + strings.Trim(clusterDomain, ".")
 	}
-	res := &render.Resolved{Service: svc, Address: svc + "." + in.namespace + suffix}
+	res := &render.Resolved{Service: svc, Address: svc + "." + in.namespace + suffix, Workload: render.WorkloadContainers}
 	if p.Replicas != nil || len(clusterDomain) > 0 {
 		n, _ := toInt(own["replicas"])
 		if p.Replicas == nil {

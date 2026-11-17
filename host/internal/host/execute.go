@@ -14,8 +14,37 @@ import (
 
 const defaultTimeout = 10 * time.Minute
 
+func workloadOf(u *render.Unit) (render.WorkloadKind, error) {
+	if u == nil {
+		return render.WorkloadUnknown, fmt.Errorf("no unit")
+	}
+	switch u.Workload {
+	case render.WorkloadContainers, render.WorkloadPackages:
+		return u.Workload, nil
+	case render.WorkloadUnknown:
+		if len(u.Packages) > 0 {
+			return render.WorkloadPackages, nil
+		}
+		if len(u.Image) > 0 {
+			return render.WorkloadContainers, nil
+		}
+		return render.WorkloadUnknown, nil
+	default:
+		return render.WorkloadUnknown, fmt.Errorf("%s: workload %q is not known", u.Key, u.Workload)
+	}
+}
+
 func hostHook(u *render.Unit) bool {
-	return u != nil && len(u.Image) == 0
+	kind, err := workloadOf(u)
+	return err == nil && kind != render.WorkloadContainers
+}
+
+// Lock serializes the installation's sagas against the target's state file.
+func (in *Installation) Lock(ctx context.Context) (func(context.Context) error, error) {
+	if in.state == nil {
+		return nil, fmt.Errorf("pack keeps no record with this target (state: db or observe)")
+	}
+	return in.state.lock(ctx)
 }
 
 // ReadInstalled reads the record from the installation's state file.
@@ -63,7 +92,11 @@ func (in *Installation) Execute(ctx context.Context, st target.Step, events func
 		if st.Unit == nil {
 			return fmt.Errorf("wait %s: no unit", st.Key)
 		}
-		if len(st.Unit.Image) > 0 {
+		workload, err := workloadOf(st.Unit)
+		if err != nil {
+			return err
+		}
+		if workload == render.WorkloadContainers {
 			cs, err := in.containers(*st.Unit)
 			if err != nil {
 				return err
@@ -85,7 +118,11 @@ func (in *Installation) Execute(ctx context.Context, st target.Step, events func
 		if err != nil {
 			return err
 		}
-		if len(u.Image) > 0 {
+		workload, err := workloadOf(u)
+		if err != nil {
+			return err
+		}
+		if workload == render.WorkloadContainers {
 			return in.stopContainers(ctx, st.Key, events)
 		}
 		return in.stopServices(ctx, *u, events)
@@ -94,7 +131,11 @@ func (in *Installation) Execute(ctx context.Context, st target.Step, events func
 		if err != nil {
 			return err
 		}
-		if len(u.Image) > 0 {
+		workload, err := workloadOf(u)
+		if err != nil {
+			return err
+		}
+		if workload == render.WorkloadContainers {
 			return in.removeContainers(ctx, st.Key, events)
 		}
 		if st.Rollback {
@@ -103,13 +144,21 @@ func (in *Installation) Execute(ctx context.Context, st target.Step, events func
 		}
 		return in.removeFiles(ctx, *u, st.Destroy, events)
 	case "hook":
-		if hostHook(st.Unit) {
+		workload, err := workloadOf(st.Unit)
+		if err != nil {
+			return err
+		}
+		if workload != render.WorkloadContainers {
 			return in.execCommand(ctx, st, timeout, events)
 		}
 		return in.hook(ctx, st, timeout, events)
 	case "exec":
 		u := st.Unit
-		if u != nil && len(u.Image) > 0 {
+		workload, err := workloadOf(u)
+		if err != nil {
+			return err
+		}
+		if workload == render.WorkloadContainers {
 			return in.execContainer(ctx, st, timeout, events)
 		}
 		return in.execCommand(ctx, st, timeout, events)
@@ -134,7 +183,11 @@ func (in *Installation) apply(ctx context.Context, u render.Unit, creds []render
 	if err := in.keep(creds); err != nil {
 		return err
 	}
-	if len(u.Image) > 0 {
+	workload, err := workloadOf(&u)
+	if err != nil {
+		return err
+	}
+	if workload == render.WorkloadContainers {
 		return in.applyContainers(ctx, u, creds, events)
 	}
 	cns, err := in.conns(u.Key, in.platformFor(u.Key))

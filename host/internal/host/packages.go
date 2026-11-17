@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -113,9 +114,8 @@ func packagesOf(v any) (all []string, byOS map[string][]string) {
 var aptEnv = []string{"DEBIAN_FRONTEND=noninteractive", "APT_LISTCHANGES_FRONTEND=none"}
 
 // installNames installs the packages on the host: apt on debian, dnf on rhel. A name with :// is a package file
-// the agent fetches first (the mirror serves it over the loopback). A package the host already has — at the
-// version a `name=version` pin says — is not asked of the package manager again: apt would upgrade a present name
-// to the repository's newest, a change no plan showed.
+// the agent fetches first (the mirror serves it over the loopback). An unpinned package is checked against the
+// repository on every apply; a package with a name=version pin is skipped only when that exact version is installed.
 func (c *conn) installNames(ctx context.Context, f osFacts, names []string, events func(string)) error {
 	var plain []string
 	for _, n := range names {
@@ -137,7 +137,11 @@ func (c *conn) installNames(ctx context.Context, f osFacts, names []string, even
 			_, _ = c.exec(ctx, []string{"rm", "-f", "/tmp/pack-package"}, nil, nil, nil)
 			continue
 		}
-		if c.hasPackage(ctx, f, n) {
+		needed, err := c.packageNeedsInstall(ctx, f, n)
+		if err != nil {
+			return err
+		}
+		if !needed {
 			continue
 		}
 		plain = append(plain, n)
@@ -156,6 +160,58 @@ func (c *conn) installNames(ctx context.Context, f osFacts, names []string, even
 	return fmt.Errorf("%sthe OS family %q is not known (debian, rhel)", c.h.prefix(), f.family)
 }
 
+func (c *conn) packageNeedsInstall(ctx context.Context, f osFacts, name string) (bool, error) {
+	base, _, pinned := strings.Cut(name, "=")
+	installed := c.hasPackage(ctx, f, name)
+	if pinned || !installed {
+		return !installed, nil
+	}
+	switch f.family {
+	case "debian":
+		out, err := c.exec(ctx, []string{"apt-cache", "policy", base}, nil, nil, nil)
+		if err != nil {
+			return false, err
+		}
+		var installedVersion, candidate string
+		for line := range strings.Lines(string(out)) {
+			fields := strings.Fields(line)
+			if len(fields) != 2 {
+				continue
+			}
+			switch fields[0] {
+			case "Installed:":
+				installedVersion = fields[1]
+			case "Candidate:":
+				candidate = fields[1]
+			}
+		}
+		return candidate != "(none)" && installedVersion != candidate, nil
+	case "rhel":
+		_, err := c.exec(ctx, []string{"dnf", "--quiet", "check-update", base}, nil, nil, nil)
+		var exit *execExitError
+		if errors.As(err, &exit) && exit.code == 100 {
+			return true, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+	return false, fmt.Errorf("%sthe OS family %q is not known (debian, rhel)", c.h.prefix(), f.family)
+}
+
+func (c *conn) packageVerdict(ctx context.Context, f osFacts, name string) (verdict, error) {
+	needed, err := c.packageNeedsInstall(ctx, f, name)
+	if err != nil {
+		return verdict{}, err
+	}
+	installed := !needed
+	if needed {
+		installed = c.hasPackage(ctx, f, name)
+	}
+	return verdict{found: installed, differed: needed}, nil
+}
+
 // hasPackage says whether the host has the package installed: the name, at the version a `name=version` pin says.
 // A name that is not the package manager's (an unresolvable one) counts as absent: the install that follows says why.
 func (c *conn) hasPackage(ctx context.Context, f osFacts, name string) bool {
@@ -169,8 +225,20 @@ func (c *conn) hasPackage(ctx context.Context, f osFacts, name string) bool {
 		status, v, _ := strings.Cut(strings.TrimSpace(string(out)), " ")
 		return status == "ii" && (!pinned || v == pin)
 	case "rhel":
-		_, err := c.exec(ctx, []string{"rpm", "-q", name}, nil, nil, nil)
-		return err == nil
+		base, pin, pinned := strings.Cut(name, "=")
+		out, err := c.exec(ctx, []string{"rpm", "-q", "--queryformat", "%{EVR}\\n", base}, nil, nil, nil)
+		if err != nil {
+			return false
+		}
+		if !pinned {
+			return true
+		}
+		for line := range strings.Lines(string(out)) {
+			if strings.TrimSpace(line) == pin {
+				return true
+			}
+		}
+		return false
 	}
 	return false
 }

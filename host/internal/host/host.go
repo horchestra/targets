@@ -222,6 +222,10 @@ func (in *Installation) Resolve(key string, p render.Placement) (*render.Resolve
 	if err != nil {
 		return nil, err
 	}
+	res.Workload = render.WorkloadContainers
+	if packaged(own) {
+		res.Workload = render.WorkloadPackages
+	}
 	in.platMu.Lock()
 	in.platform[key] = own
 	in.platMu.Unlock()

@@ -49,6 +49,13 @@ func (s *storeState) remove() error {
 	return s.state.remove()
 }
 
+func (s *storeState) lock(ctx context.Context) (func(context.Context) error, error) {
+	if s.state == nil {
+		return nil, s.noRecord()
+	}
+	return s.state.lock(ctx)
+}
+
 func (s *storeState) secret(name, key string) (string, bool, error) {
 	fields, ok, err := s.store.Get(context.Background(), s.path(name))
 	if err != nil {

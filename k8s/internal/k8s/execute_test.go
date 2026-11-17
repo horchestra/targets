@@ -9,8 +9,10 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -71,6 +73,107 @@ func TestRecord(t *testing.T) {
 	err = c.Get(context.Background(), key(in, "pack-prod"), cm)
 	if err != nil || cm.Labels[labelPart] != "record" {
 		t.Errorf("the record's ConfigMap: %v %v", cm.Labels, err)
+	}
+}
+
+func TestRecordRejectsAStaleWriter(t *testing.T) {
+	first := &Installation{installation: "prod", namespace: "default"}
+	second := &Installation{installation: "prod", namespace: "default"}
+	c := fake(first)
+	second.once.Do(func() {})
+	second.client = c
+	if _, _, err := first.ReadInstalled(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := second.ReadInstalled(); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.WriteInstalled([]byte(`{"version":"first"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.WriteInstalled([]byte(`{"version":"second"}`)); !apierrors.IsConflict(err) && !apierrors.IsAlreadyExists(err) {
+		t.Fatalf("a stale writer must conflict: %v", err)
+	}
+}
+
+func TestInstallationLock(t *testing.T) {
+	first := &Installation{installation: "prod", namespace: "default", lockTTL: 40 * time.Millisecond, lockRenew: 5 * time.Millisecond}
+	second := &Installation{installation: "prod", namespace: "default"}
+	c := fake(first)
+	second.once.Do(func() {})
+	second.client = c
+	ctx := context.Background()
+	_, err := first.Lock(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := second.Lock(ctx); err == nil {
+		t.Fatal("a second saga took the live installation's lock")
+	}
+
+	lease := &coordinationv1.Lease{}
+	if err := c.Get(ctx, key(first, first.recordName()), lease); err != nil {
+		t.Fatal(err)
+	}
+	initial := lease.Spec.RenewTime.Time
+	deadline := time.Now().Add(time.Second)
+	for !lease.Spec.RenewTime.Time.After(initial) {
+		if time.Now().After(deadline) {
+			t.Fatal("the live lock was not renewed")
+		}
+		time.Sleep(5 * time.Millisecond)
+		if err := c.Get(ctx, key(first, first.recordName()), lease); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	close(first.lockStop)
+	<-first.lockDone
+	for {
+		if err := c.Get(ctx, key(first, first.recordName()), lease); err != nil {
+			t.Fatal(err)
+		}
+		lease.Spec.RenewTime = &metav1.MicroTime{Time: time.Now().Add(-time.Minute)}
+		if err := c.Update(ctx, lease); !apierrors.IsConflict(err) {
+			if err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+	}
+	secondUnlock, err := second.Lock(ctx)
+	if err != nil {
+		t.Fatalf("an expired lock was not taken: %v", err)
+	}
+	if err := secondUnlock(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLockLossIsReported(t *testing.T) {
+	in := &Installation{installation: "prod", namespace: "default", lockTTL: 40 * time.Millisecond, lockRenew: 5 * time.Millisecond}
+	c := fake(in)
+	if _, err := in.Lock(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	lease := &coordinationv1.Lease{}
+	for {
+		if err := c.Get(context.Background(), key(in, in.recordName()), lease); err != nil {
+			t.Fatal(err)
+		}
+		other := "another-target"
+		lease.Spec.HolderIdentity = &other
+		if err := c.Update(context.Background(), lease); !apierrors.IsConflict(err) {
+			if err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+	}
+	select {
+	case <-in.LockLost():
+	case <-time.After(time.Second):
+		t.Fatal("the old lock owner was not fenced after losing ownership")
 	}
 }
 

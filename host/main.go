@@ -29,7 +29,7 @@ func main() {
 		os.Exit(1)
 	}
 	host.SetAgents(bin)
-	if err := remote.Serve("host", host.Factory, remote.CapRecord, remote.CapDiscover, remote.CapLogs, remote.CapHealth, remote.CapFileURL, remote.CapInspect); err != nil {
+	if err := remote.Serve("host", host.Factory, remote.CapRecord, remote.CapLock, remote.CapBlob, remote.CapDiscover, remote.CapLogs, remote.CapHealth, remote.CapFileURL, remote.CapInspect); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "pack-target-host:", err)
 		os.Exit(1)
 	}

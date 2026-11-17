@@ -18,9 +18,13 @@ import (
 // Inspect says whether the key's hosts already hold exactly what the unit says — the files' bytes and modes, the
 // packages at their pins, the services enabled, a container's image — so that an installation that keeps no
 // record (state: observe) plans from what is there: absent — nothing of the key; differs — there, not as the
-// unit says; matches — as it says.
+// unit says or with a package update available; matches — as it says.
 func (in *Installation) Inspect(ctx context.Context, u render.Unit, creds []render.Credential) (target.Hold, error) {
-	if len(u.Image) > 0 {
+	workload, err := workloadOf(&u)
+	if err != nil {
+		return "", err
+	}
+	if workload == render.WorkloadContainers {
 		return in.inspectContainers(ctx, u)
 	}
 	cns, err := in.conns(u.Key, in.platformFor(u.Key))
@@ -74,13 +78,19 @@ func (in *Installation) inspectHost(ctx context.Context, cn *conn, u render.Unit
 	if p != nil {
 		files = append(slices.Clone(p.Repo), p.Files...)
 		svcs = p.Services
-		for _, n := range p.Names {
-			n = f.resolve(n)
-			if strings.Contains(n, "://") { // a package file: its presence is the files' below
-				continue
+		for _, names := range [][]string{p.Prepare, p.Names} {
+			for _, n := range names {
+				n = f.resolve(n)
+				if strings.Contains(n, "://") { // a package file: its presence is the files' below
+					continue
+				}
+				pv, err := cn.packageVerdict(ctx, f, n)
+				if err != nil {
+					return v, err
+				}
+				v.found = v.found || pv.found
+				v.differed = v.differed || pv.differed
 			}
-			ok := cn.hasPackage(ctx, f, n)
-			v.see(ok, ok)
 		}
 		if len(p.Sysctls) > 0 || len(p.Modules) > 0 {
 			kv, err := in.kernelVerdict(ctx, cn, u.Key, p)
@@ -96,8 +106,12 @@ func (in *Installation) inspectHost(ctx context.Context, cn *conn, u render.Unit
 		if pkgs := stringsOf(platform["packages"]); len(pkgs) > 0 {
 			for _, n := range pkgs {
 				n = f.resolve(n)
-				ok := cn.hasPackage(ctx, f, n)
-				v.see(ok, ok)
+				pv, err := cn.packageVerdict(ctx, f, n)
+				if err != nil {
+					return v, err
+				}
+				v.found = v.found || pv.found
+				v.differed = v.differed || pv.differed
 			}
 		}
 	}

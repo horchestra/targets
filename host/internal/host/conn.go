@@ -306,6 +306,13 @@ func (c *conn) info(ctx context.Context) (*agentpb.InfoResponse, error) {
 	return s.info, nil
 }
 
+type execExitError struct {
+	code    int
+	message string
+}
+
+func (e *execExitError) Error() string { return e.message }
+
 // exec runs argv on the host through the agent: the output's lines to events, a non-zero exit an error with the
 // output's tail. A call the connection dropped resets the session: the next one starts the agent anew, and the
 // saga repeats the step.
@@ -335,7 +342,7 @@ func (c *conn) exec(ctx context.Context, argv []string, env []string, stdin []by
 			return nil, fmt.Errorf("%s%s: %w", c.h.prefix(), argv[0], err)
 		}
 		if code != 0 {
-			return nil, fmt.Errorf("%s%s: exit %d: %s", c.h.prefix(), argv[0], code, strings.Join(tail, "; "))
+			return nil, &execExitError{code: code, message: fmt.Sprintf("%s%s: exit %d: %s", c.h.prefix(), argv[0], code, strings.Join(tail, "; "))}
 		}
 		return []byte(out.String()), nil
 	}
@@ -361,7 +368,7 @@ func (c *conn) exec(ctx context.Context, argv []string, env []string, stdin []by
 		emit(ev.Line)
 	}
 	if code != 0 {
-		return nil, fmt.Errorf("%s%s: exit %d: %s", c.h.prefix(), argv[0], code, strings.Join(tail, "; "))
+		return nil, &execExitError{code: code, message: fmt.Sprintf("%s%s: exit %d: %s", c.h.prefix(), argv[0], code, strings.Join(tail, "; "))}
 	}
 	return []byte(out.String()), nil
 }

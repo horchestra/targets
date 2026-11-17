@@ -49,7 +49,8 @@ A key is a StatefulSet (`podManagementPolicy: Parallel`) with a headless Service
 `backoffLimit: 0`. Config files: a Secret per directory, each file mounted over the image by `subPath` (a per-instance
 file by `subPathExpr: $(POD_NAME)`), a checksum annotation rolls the pods when one changes. Claims:
 `volumeClaimTemplates`, which outlive the key. Readiness: a `readinessProbe`. The installation's record is the
-ConfigMap `pack-<installation>`.
+ConfigMap `pack-<installation>`; current, previous and historical values live in content-addressed revision ConfigMaps,
+so the main record stays small and pruning removes only revisions no longer referenced.
 
 | Step   |                                                                                                                      |
 |--------|----------------------------------------------------------------------------------------------------------------------|
